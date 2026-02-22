@@ -164,11 +164,17 @@
 <script setup name="Index">
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router'
 
 const version = ref('1.0.0')
 const techStack = ['tensorflow', 'vue3', 'elementplus', 'fastapi', 'langchain', 'LLM', 'RAG', 'nginx', 'docker']
+const router = useRouter()
 
 const otherFunctions = [
+  { key: 'orgManage', name: '组织管理' },
+  { key: 'userManage', name: '人员管理' },
+  { key: 'classManage', name: '班级管理' },
+  { key: 'pad', name: 'Pad端入口' },
   { key: 'login', name: '登录' },
   { key: 'register', name: '注册' },
   { key: 'punch', name: '打卡记录' },
@@ -186,6 +192,22 @@ function goTarget(url) {
 }
 
 function goToFunction(key) {
+  if (key === 'orgManage') {
+    router.push('/system/dept')
+    return
+  }
+  if (key === 'userManage') {
+    router.push('/system/user')
+    return
+  }
+  if (key === 'classManage') {
+    router.push('/system/dept')
+    return
+  }
+  if (key === 'pad') {
+    router.push('/education/auth?redirect=/education/pad')
+    return
+  }
   // 这里可以根据实际路由进行跳转
   ElMessage(`正在跳转到${otherFunctions.find(f => f.key === key)?.name}功能`)
   // 实际项目中可以使用 router.push 进行跳转
@@ -194,20 +216,23 @@ function goToFunction(key) {
 
 <style scoped lang="scss">
 .home {
-  padding: 20px;
-  font-family: "open sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  color: #676a6c;
+  padding: 24px;
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: #334155;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(15, 23, 42, 0.06);
   
   h1 {
     font-size: 36px;
     margin-bottom: 10px;
-    color: #333;
+    color: #0b3b51;
   }
   
   h2 {
     font-size: 24px;
     margin-bottom: 15px;
-    color: #333;
+    color: #163f57;
   }
   
   .feature-card {
@@ -215,8 +240,8 @@ function goToFunction(key) {
     transition: all 0.3s ease;
     
     &:hover {
-      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-      transform: translateY(-5px);
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.1);
+      transform: translateY(-4px);
     }
     
     .card-header {
@@ -224,11 +249,11 @@ function goToFunction(key) {
       align-items: center;
       font-size: 18px;
       font-weight: 500;
-      color: #333;
+      color: #0f172a;
       
       i {
         margin-right: 8px;
-        color: #409eff;
+        color: #0284c7;
       }
     }
     
@@ -247,7 +272,7 @@ function goToFunction(key) {
           
           &::before {
             content: "•";
-            color: #409eff;
+            color: #0f766e;
             position: absolute;
             left: 0;
             font-size: 18px;
@@ -274,4 +299,3 @@ function goToFunction(key) {
   }
 }
 </style>
-

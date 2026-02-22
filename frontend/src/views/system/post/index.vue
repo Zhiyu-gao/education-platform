@@ -1,23 +1,15 @@
 <template>
    <div class="app-container">
       <el-form :model="queryParams" ref="queryRef" :inline="true" v-show="showSearch">
-         <el-form-item label="岗位编码" prop="postCode">
-            <el-input
-               v-model="queryParams.postCode"
-               placeholder="请输入岗位编码"
-               clearable
-               style="width: 200px"
-               @keyup.enter="handleQuery"
-            />
-         </el-form-item>
-         <el-form-item label="岗位名称" prop="postName">
-            <el-input
-               v-model="queryParams.postName"
-               placeholder="请输入岗位名称"
-               clearable
-               style="width: 200px"
-               @keyup.enter="handleQuery"
-            />
+         <el-form-item label="身份类型" prop="postName">
+            <el-select v-model="queryParams.postName" placeholder="请选择身份类型" clearable style="width: 200px">
+               <el-option
+                  v-for="item in identityPostOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.label"
+               />
+            </el-select>
          </el-form-item>
          <el-form-item label="状态" prop="status">
             <el-select v-model="queryParams.status" placeholder="岗位状态" clearable style="width: 200px">
@@ -79,9 +71,9 @@
 
       <el-table v-loading="loading" :data="postList" @selection-change="handleSelectionChange">
          <el-table-column type="selection" width="55" align="center" />
-         <el-table-column label="岗位编号" align="center" prop="postId" />
-         <el-table-column label="岗位编码" align="center" prop="postCode" />
-         <el-table-column label="岗位名称" align="center" prop="postName" />
+         <el-table-column label="编号" align="center" prop="postId" />
+         <el-table-column label="身份编码" align="center" prop="postCode" />
+         <el-table-column label="身份名称" align="center" prop="postName" />
          <el-table-column label="岗位排序" align="center" prop="postSort" />
          <el-table-column label="状态" align="center" prop="status">
             <template #default="scope">
@@ -109,19 +101,26 @@
          @pagination="getList"
       />
 
-      <!-- 添加或修改岗位对话框 -->
+      <!-- 添加或修改身份对话框 -->
       <el-dialog :title="title" v-model="open" width="500px" append-to-body>
          <el-form ref="postRef" :model="form" :rules="rules" label-width="80px">
-            <el-form-item label="岗位名称" prop="postName">
-               <el-input v-model="form.postName" placeholder="请输入岗位名称" />
+            <el-form-item label="身份名称" prop="postName">
+               <el-select v-model="form.postName" placeholder="请选择身份名称" style="width: 100%" @change="handleIdentityChange">
+                  <el-option
+                     v-for="item in identityPostOptions"
+                     :key="item.value"
+                     :label="item.label"
+                     :value="item.label"
+                  />
+               </el-select>
             </el-form-item>
-            <el-form-item label="岗位编码" prop="postCode">
-               <el-input v-model="form.postCode" placeholder="请输入编码名称" />
+            <el-form-item label="身份编码" prop="postCode">
+               <el-input v-model="form.postCode" placeholder="自动生成身份编码" readonly />
             </el-form-item>
-            <el-form-item label="岗位顺序" prop="postSort">
+            <el-form-item label="显示顺序" prop="postSort">
                <el-input-number v-model="form.postSort" controls-position="right" :min="0" />
             </el-form-item>
-            <el-form-item label="岗位状态" prop="status">
+            <el-form-item label="状态" prop="status">
                <el-radio-group v-model="form.status">
                   <el-radio
                      v-for="dict in sys_normal_disable"
@@ -159,13 +158,17 @@ const single = ref(true)
 const multiple = ref(true)
 const total = ref(0)
 const title = ref("")
+const identityPostOptions = ref([
+  { label: "管理员", value: "admin", code: "IDENTITY_ADMIN", sort: 1 },
+  { label: "老师", value: "teacher", code: "IDENTITY_TEACHER", sort: 2 },
+  { label: "学生", value: "student", code: "IDENTITY_STUDENT", sort: 3 }
+])
 
 const data = reactive({
   form: {},
   queryParams: {
     pageNum: 1,
     pageSize: 10,
-    postCode: undefined,
     postName: undefined,
     status: undefined
   },
@@ -198,13 +201,22 @@ function cancel() {
 function reset() {
   form.value = {
     postId: undefined,
-    postCode: undefined,
-    postName: undefined,
-    postSort: 0,
+    postCode: "IDENTITY_TEACHER",
+    postName: "老师",
+    postSort: 2,
     status: "0",
     remark: undefined
   }
   proxy.resetForm("postRef")
+}
+
+function handleIdentityChange(postName) {
+  const current = identityPostOptions.value.find(item => item.label === postName)
+  if (!current) return
+  form.value.postCode = current.code
+  if (!form.value.postSort || form.value.postSort <= 0) {
+    form.value.postSort = current.sort
+  }
 }
 
 /** 搜索按钮操作 */
@@ -230,7 +242,7 @@ function handleSelectionChange(selection) {
 function handleAdd() {
   reset()
   open.value = true
-  title.value = "添加岗位"
+  title.value = "添加身份"
 }
 
 /** 修改按钮操作 */
@@ -239,8 +251,9 @@ function handleUpdate(row) {
   const postId = row.postId || ids.value
   getPost(postId).then(response => {
     form.value = response.data
+    handleIdentityChange(form.value.postName)
     open.value = true
-    title.value = "修改岗位"
+    title.value = "修改身份"
   })
 }
 
@@ -268,7 +281,7 @@ function submitForm() {
 /** 删除按钮操作 */
 function handleDelete(row) {
   const postIds = row.postId || ids.value
-  proxy.$modal.confirm('是否确认删除岗位编号为"' + postIds + '"的数据项？').then(function() {
+  proxy.$modal.confirm('是否确认删除身份编号为"' + postIds + '"的数据项？').then(function() {
     return delPost(postIds)
   }).then(() => {
     getList()

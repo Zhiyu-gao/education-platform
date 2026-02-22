@@ -1,47 +1,71 @@
 /**
- * 教育管理模块路由
+ * 教育 Pad 端路由（全屏独立，不使用若依 Layout）
  */
-import Layout from '@/layout'
 
-// 教育管理模块路由数组 - 完全扁平化结构
+const educationAccessRoles = ['admin', 'manager', 'teacher', 'student', 'ROLE_DEFAULT']
+
 const educationRoutes = [
   {
-    path: '/education/dashboard',
-    component: () => import('@/views/education/dashboard'),
-    name: 'EducationDashboard',
+    path: '/education',
+    redirect: '/education/auth?redirect=/education/pad',
+    hidden: true
+  },
+  {
+    path: '/education/pad',
+    component: () => import('@/views/education/pad'),
+    name: 'EducationPad',
+    roles: educationAccessRoles,
     meta: {
-      title: '教育管理首页',
-      icon: 'el-icon-home',
+      title: 'Pad教育端',
       noCache: true
     }
   },
   {
+    path: '/education/dashboard',
+    redirect: '/education/auth?redirect=/education/pad',
+    hidden: true
+  },
+  {
     path: '/education/index',
-    component: () => import('@/views/education/index'),
-    name: 'StudentPerformance',
-    meta: {
-      title: '学生成绩管理',
-      icon: 'el-icon-document',
-      noCache: true
-    }
+    redirect: '/education/auth?redirect=/education/pad',
+    hidden: true
   },
   {
     path: '/education/rag',
     component: () => import('@/views/education/rag'),
-    name: 'RagIndex',
+    name: 'EducationRag',
+    roles: educationAccessRoles,
     meta: {
-      title: '智能问答',
-      icon: 'chat-line-round'
-    }
+      title: 'AI 智能问答',
+      noCache: true
+    },
+    hidden: true
   },
   {
     path: '/education/prediction',
     component: () => import('@/views/education/prediction'),
-    name: 'ScorePrediction',
+    name: 'EducationPrediction',
+    roles: educationAccessRoles,
     meta: {
-      title: '成绩预测',
-      icon: 'bar-chart-3'
-    }
+      title: 'AI 成绩预测',
+      noCache: true
+    },
+    hidden: true
+  },
+  {
+    path: '/education/:pathMatch(.*)*',
+    redirect: '/education/auth?redirect=/education/pad',
+    hidden: true
+  },
+  {
+    path: '/pad',
+    redirect: '/education/auth?redirect=/education/pad',
+    hidden: true
+  },
+  {
+    path: '/pad/:pathMatch(.*)*',
+    redirect: '/education/auth?redirect=/education/pad',
+    hidden: true
   }
 ]
 

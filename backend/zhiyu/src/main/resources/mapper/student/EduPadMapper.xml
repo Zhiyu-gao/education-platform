@@ -1,0 +1,370 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.student.mapper.EduPadMapper">
+
+    <resultMap id="EduHomeworkResult" type="com.ruoyi.student.domain.EduHomework">
+        <id property="homeworkId" column="homework_id" />
+        <result property="title" column="title" />
+        <result property="content" column="content" />
+        <result property="className" column="class_name" />
+        <result property="teacherId" column="teacher_id" />
+        <result property="teacherName" column="teacher_name" />
+        <result property="dueTime" column="due_time" />
+        <result property="status" column="status" />
+        <result property="createTime" column="create_time" />
+    </resultMap>
+
+    <resultMap id="EduExamResult" type="com.ruoyi.student.domain.EduExam">
+        <id property="examId" column="exam_id" />
+        <result property="title" column="title" />
+        <result property="className" column="class_name" />
+        <result property="teacherId" column="teacher_id" />
+        <result property="teacherName" column="teacher_name" />
+        <result property="examTime" column="exam_time" />
+        <result property="totalScore" column="total_score" />
+        <result property="createTime" column="create_time" />
+    </resultMap>
+
+    <resultMap id="EduTeacherTaskResult" type="com.ruoyi.student.domain.EduTeacherTask">
+        <id property="taskId" column="task_id" />
+        <result property="title" column="title" />
+        <result property="content" column="content" />
+        <result property="teacherId" column="teacher_id" />
+        <result property="teacherName" column="teacher_name" />
+        <result property="dueTime" column="due_time" />
+        <result property="status" column="status" />
+        <result property="createTime" column="create_time" />
+    </resultMap>
+
+    <insert id="insertHomework" parameterType="com.ruoyi.student.domain.EduHomework" useGeneratedKeys="true" keyProperty="homeworkId">
+        insert into edu_homework(title, content, class_name, teacher_id, teacher_name, due_time, status, create_time)
+        values(#{title}, #{content}, #{className}, #{teacherId}, #{teacherName}, #{dueTime}, #{status}, now())
+    </insert>
+
+    <select id="selectHomeworkByTeacherId" parameterType="Long" resultMap="EduHomeworkResult">
+        select * from edu_homework where teacher_id = #{teacherId} order by create_time desc
+    </select>
+
+    <select id="selectHomeworkAll" resultMap="EduHomeworkResult">
+        select * from edu_homework order by create_time desc
+    </select>
+
+    <select id="selectHomeworkByClassName" parameterType="String" resultMap="EduHomeworkResult">
+        select * from edu_homework where class_name = #{className} order by create_time desc
+    </select>
+
+    <insert id="insertHomeworkSubmission" parameterType="com.ruoyi.student.domain.EduHomeworkSubmission" useGeneratedKeys="true" keyProperty="submissionId">
+        insert into edu_homework_submission(homework_id, student_id, student_name, answer_content, submit_time, score, feedback, create_time)
+        values(#{homeworkId}, #{studentId}, #{studentName}, #{answerContent}, #{submitTime}, #{score}, #{feedback}, now())
+    </insert>
+
+    <select id="selectHomeworkSubmissionByTeacherId" parameterType="Long" resultType="java.util.Map">
+        select s.submission_id,
+               s.homework_id,
+               h.title as homework_title,
+               s.student_id,
+               s.student_name,
+               s.answer_content,
+               s.submit_time,
+               s.score,
+               s.feedback
+        from edu_homework_submission s
+                 left join edu_homework h on s.homework_id = h.homework_id
+        where h.teacher_id = #{teacherId}
+        order by s.submit_time desc
+    </select>
+
+    <select id="selectHomeworkSubmissionByStudentId" parameterType="Long" resultType="java.util.Map">
+        select s.submission_id,
+               s.homework_id,
+               h.title as homework_title,
+               s.student_id,
+               s.student_name,
+               s.answer_content,
+               s.submit_time,
+               s.score,
+               s.feedback
+        from edu_homework_submission s
+                 left join edu_homework h on s.homework_id = h.homework_id
+        where s.student_id = #{studentId}
+        order by s.submit_time desc
+    </select>
+
+    <select id="selectHomeworkSubmissionById" parameterType="Long" resultType="java.util.Map">
+        select s.submission_id,
+               s.homework_id,
+               s.student_id,
+               s.student_name,
+               s.score,
+               s.feedback,
+               h.teacher_id,
+               h.class_name
+        from edu_homework_submission s
+                 left join edu_homework h on s.homework_id = h.homework_id
+        where s.submission_id = #{submissionId}
+        limit 1
+    </select>
+
+    <update id="updateHomeworkSubmissionScore" parameterType="com.ruoyi.student.domain.EduHomeworkSubmission">
+        update edu_homework_submission
+        set score = #{score},
+            feedback = #{feedback},
+            update_time = now()
+        where submission_id = #{submissionId}
+    </update>
+
+    <insert id="insertExam" parameterType="com.ruoyi.student.domain.EduExam" useGeneratedKeys="true" keyProperty="examId">
+        insert into edu_exam(title, class_name, teacher_id, teacher_name, exam_time, total_score, create_time)
+        values(#{title}, #{className}, #{teacherId}, #{teacherName}, #{examTime}, #{totalScore}, now())
+    </insert>
+
+    <select id="selectExamByTeacherId" parameterType="Long" resultMap="EduExamResult">
+        select * from edu_exam where teacher_id = #{teacherId} order by exam_time desc
+    </select>
+
+    <select id="selectExamAll" resultMap="EduExamResult">
+        select * from edu_exam order by exam_time desc
+    </select>
+
+    <select id="selectExamByClassName" parameterType="String" resultMap="EduExamResult">
+        select * from edu_exam where class_name = #{className} order by exam_time desc
+    </select>
+
+    <select id="selectExamById" parameterType="Long" resultMap="EduExamResult">
+        select * from edu_exam where exam_id = #{examId} limit 1
+    </select>
+
+    <insert id="upsertExamScore" parameterType="com.ruoyi.student.domain.EduExamScore">
+        insert into edu_exam_score(exam_id, student_id, student_name, score, remark, create_time)
+        values(#{examId}, #{studentId}, #{studentName}, #{score}, #{remark}, now())
+        on duplicate key update score = values(score), remark = values(remark), update_time = now()
+    </insert>
+
+    <select id="selectExamScoreByStudentId" parameterType="Long" resultType="java.util.Map">
+        select es.score_id,
+               es.exam_id,
+               e.title as exam_title,
+               e.class_name,
+               e.exam_time,
+               e.total_score,
+               es.student_id,
+               es.student_name,
+               es.score,
+               es.remark
+        from edu_exam_score es
+                 left join edu_exam e on es.exam_id = e.exam_id
+        where es.student_id = #{studentId}
+        order by e.exam_time desc
+    </select>
+
+    <select id="selectExamScoreAll" resultType="java.util.Map">
+        select es.score_id,
+               es.exam_id,
+               e.title as exam_title,
+               e.class_name,
+               e.exam_time,
+               e.total_score,
+               es.student_id,
+               es.student_name,
+               es.score,
+               es.remark
+        from edu_exam_score es
+                 left join edu_exam e on es.exam_id = e.exam_id
+        order by e.exam_time desc
+    </select>
+
+    <insert id="insertTeacherTask" parameterType="com.ruoyi.student.domain.EduTeacherTask" useGeneratedKeys="true" keyProperty="taskId">
+        insert into edu_teacher_task(title, content, teacher_id, teacher_name, due_time, status, create_time)
+        values(#{title}, #{content}, #{teacherId}, #{teacherName}, #{dueTime}, #{status}, now())
+    </insert>
+
+    <select id="selectTeacherTaskByTeacherId" parameterType="Long" resultMap="EduTeacherTaskResult">
+        select * from edu_teacher_task where teacher_id = #{teacherId} order by create_time desc
+    </select>
+
+    <select id="selectStudentPerformanceAll" resultType="java.util.Map">
+        select id as student_id,
+               gender,
+               exam_score,
+               school_type,
+               class_name,
+               grade_no,
+               class_no,
+               create_time
+        from student_performance
+        order by create_time desc
+    </select>
+
+    <select id="selectStudentPerformanceByClassName" parameterType="String" resultType="java.util.Map">
+        select id as student_id,
+               gender,
+               exam_score,
+               school_type,
+               class_name,
+               grade_no,
+               class_no,
+               create_time
+        from student_performance
+        where class_name = #{className}
+        order by create_time desc
+    </select>
+
+    <select id="selectStudentPerformanceByStudentId" parameterType="Long" resultType="java.util.Map">
+        select id as student_id,
+               gender,
+               exam_score,
+               school_type,
+               class_name,
+               grade_no,
+               class_no,
+               create_time
+        from student_performance
+        where id = #{studentId}
+        order by create_time desc
+    </select>
+
+    <select id="selectHomeworkSubmissionExists" resultType="Long">
+        select submission_id from edu_homework_submission
+        where homework_id = #{homeworkId} and student_id = #{studentId}
+        limit 1
+    </select>
+
+    <insert id="insertForumPost" parameterType="com.ruoyi.student.domain.EduForumPost" useGeneratedKeys="true" keyProperty="postId">
+        insert into edu_forum_post(title, content, author_id, author_name, author_role, target_role, class_name, create_time)
+        values(#{title}, #{content}, #{authorId}, #{authorName}, #{authorRole}, #{targetRole}, #{className}, now())
+    </insert>
+
+    <select id="selectForumPostsByRole" resultType="java.util.Map">
+        select post_id,
+               title,
+               content,
+               author_id,
+               author_name,
+               author_role,
+               target_role,
+               class_name,
+               create_time
+        from edu_forum_post
+        where (target_role = 'ALL' or target_role = #{role})
+          and class_name = #{className}
+        order by create_time desc
+    </select>
+
+    <select id="selectForumPostsAll" resultType="java.util.Map">
+        select post_id,
+               title,
+               content,
+               author_id,
+               author_name,
+               author_role,
+               target_role,
+               class_name,
+               create_time
+        from edu_forum_post
+        order by create_time desc
+    </select>
+
+    <insert id="insertForumReply" parameterType="com.ruoyi.student.domain.EduForumReply" useGeneratedKeys="true" keyProperty="replyId">
+        insert into edu_forum_reply(post_id, content, author_id, author_name, author_role, create_time)
+        values(#{postId}, #{content}, #{authorId}, #{authorName}, #{authorRole}, now())
+    </insert>
+
+    <select id="selectForumRepliesByPostIds" resultType="java.util.Map">
+        select reply_id,
+               post_id,
+               content,
+               author_id,
+               author_name,
+               author_role,
+               create_time
+        from edu_forum_reply
+        where post_id in
+        <foreach collection="postIds" item="postId" open="(" separator="," close=")">
+            #{postId}
+        </foreach>
+        order by create_time asc
+    </select>
+
+    <select id="selectForumLastReadTime" parameterType="Long" resultType="java.util.Date">
+        select last_read_time from edu_forum_read_state where user_id = #{userId} limit 1
+    </select>
+
+    <insert id="insertForumReadState">
+        insert into edu_forum_read_state(user_id, last_read_time, create_time)
+        values(#{userId}, #{readTime}, now())
+    </insert>
+
+    <update id="updateForumReadState">
+        update edu_forum_read_state
+        set last_read_time = #{readTime},
+            update_time = now()
+        where user_id = #{userId}
+    </update>
+
+    <select id="countUnreadForumPostsByRole" resultType="int">
+        select count(1)
+        from edu_forum_post
+        where (target_role = 'ALL' or target_role = #{role})
+          and class_name = #{className}
+          and create_time > #{readTime}
+          and author_id != #{userId}
+    </select>
+
+    <select id="countUnreadForumPostsAll" resultType="int">
+        select count(1)
+        from edu_forum_post
+        where create_time > #{readTime}
+          and author_id != #{userId}
+    </select>
+
+    <select id="countUnreadForumRepliesByRole" resultType="int">
+        select count(1)
+        from edu_forum_reply r
+                 join edu_forum_post p on r.post_id = p.post_id
+        where (p.target_role = 'ALL' or p.target_role = #{role})
+          and p.class_name = #{className}
+          and r.create_time > #{readTime}
+          and r.author_id != #{userId}
+    </select>
+
+    <select id="countUnreadForumRepliesAll" resultType="int">
+        select count(1)
+        from edu_forum_reply
+        where create_time > #{readTime}
+          and author_id != #{userId}
+    </select>
+
+    <select id="selectUserClassProfileByUserId" parameterType="Long" resultType="java.util.Map">
+        select user_id,
+               role_key,
+               grade_no,
+               class_no,
+               class_name,
+               head_teacher
+        from edu_user_class_profile
+        where user_id = #{userId}
+        limit 1
+    </select>
+
+    <insert id="upsertUserClassProfile">
+        insert into edu_user_class_profile(user_id, role_key, grade_no, class_no, class_name, head_teacher, create_time)
+        values(#{userId}, #{roleKey}, #{gradeNo}, #{classNo}, #{className}, #{headTeacher}, now())
+        on duplicate key update role_key = values(role_key),
+                                grade_no = values(grade_no),
+                                class_no = values(class_no),
+                                class_name = values(class_name),
+                                head_teacher = values(head_teacher),
+                                update_time = now()
+    </insert>
+
+    <select id="countStudentInClassByUserId" resultType="int">
+        select count(1)
+        from edu_user_class_profile
+        where user_id = #{studentUserId}
+          and role_key = 'student'
+          and class_name = #{className}
+    </select>
+
+</mapper>

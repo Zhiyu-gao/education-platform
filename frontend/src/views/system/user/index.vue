@@ -6,7 +6,7 @@
         <pane size="16">
           <el-col>
             <div class="head-container">
-              <el-input v-model="deptName" placeholder="请输入部门名称" clearable prefix-icon="Search" style="margin-bottom: 20px" />
+              <el-input v-model="deptName" placeholder="请输入学校或班级名称" clearable prefix-icon="Search" style="margin-bottom: 20px" />
             </div>
             <div class="head-container">
               <el-tree :data="deptOptions" :props="{ label: 'label', children: 'children' }" :expand-on-click-node="false" :filter-node-method="filterNode" ref="deptTreeRef" node-key="id" highlight-current default-expand-all @node-click="handleNodeClick" />
@@ -61,7 +61,32 @@
               <el-table-column label="用户编号" align="center" key="userId" prop="userId" v-if="columns.userId.visible" />
               <el-table-column label="用户名称" align="center" key="userName" prop="userName" v-if="columns.userName.visible" :show-overflow-tooltip="true" />
               <el-table-column label="用户昵称" align="center" key="nickName" prop="nickName" v-if="columns.nickName.visible" :show-overflow-tooltip="true" />
-              <el-table-column label="部门" align="center" key="deptName" prop="dept.deptName" v-if="columns.deptName.visible" :show-overflow-tooltip="true" />
+              <el-table-column label="学校" align="center" key="schoolName" prop="schoolName" v-if="columns.schoolName.visible" :show-overflow-tooltip="true">
+                <template #default="scope">
+                  <span>{{ resolveSchoolName(scope.row) }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="组织路径" align="center" key="orgPath" prop="orgPath" v-if="columns.orgPath.visible" :show-overflow-tooltip="true">
+                <template #default="scope">
+                  <span>{{ resolveOrgPath(scope.row) }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="班级" align="center" key="className" prop="className" v-if="columns.className.visible" :show-overflow-tooltip="true">
+                <template #default="scope">
+                  <el-tag v-if="resolveClassName(scope.row) !== '-'" type="success">{{ resolveClassName(scope.row) }}</el-tag>
+                  <span v-else>-</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="身份" align="center" key="identityLabel" prop="identityLabel" v-if="columns.identityLabel.visible" :show-overflow-tooltip="true">
+                <template #default="scope">
+                  <el-tag type="warning">{{ resolveIdentityLabel(scope.row) }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="权限级别" align="center" key="permissionLevel" prop="permissionLevel" v-if="columns.permissionLevel.visible" width="120">
+                <template #default="scope">
+                  <el-tag :type="resolvePermissionLevel(scope.row).tag">{{ resolvePermissionLevel(scope.row).label }}</el-tag>
+                </template>
+              </el-table-column>
               <el-table-column label="手机号码" align="center" key="phonenumber" prop="phonenumber" v-if="columns.phonenumber.visible" width="120" />
               <el-table-column label="状态" align="center" key="status" v-if="columns.status.visible">
                 <template #default="scope">
@@ -111,8 +136,8 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="归属部门" prop="deptId">
-              <el-tree-select v-model="form.deptId" :data="enabledDeptOptions" :props="{ value: 'id', label: 'label', children: 'children' }" value-key="id" placeholder="请选择归属部门" clearable check-strictly />
+            <el-form-item label="归属班级" prop="deptId">
+              <el-tree-select v-model="form.deptId" :data="enabledDeptOptions" :props="{ value: 'id', label: 'label', children: 'children' }" value-key="id" placeholder="请选择学校下的班级" clearable check-strictly />
             </el-form-item>
           </el-col>
         </el-row>
@@ -238,6 +263,8 @@ const dateRange = ref([])
 const deptName = ref("")
 const deptOptions = ref(undefined)
 const enabledDeptOptions = ref(undefined)
+const deptMetaMap = ref({})
+const userIdentityMap = ref({})
 const initPassword = ref(undefined)
 const postOptions = ref([])
 const roleOptions = ref([])
@@ -261,7 +288,11 @@ const columns = ref({
   userId: { label: '用户编号', visible: true },
   userName: { label: '用户名称', visible: true },
   nickName: { label: '用户昵称', visible: true },
-  deptName: { label: '部门', visible: true },
+  schoolName: { label: '学校', visible: true },
+  orgPath: { label: '组织路径', visible: true },
+  className: { label: '班级', visible: true },
+  identityLabel: { label: '身份', visible: true },
+  permissionLevel: { label: '权限级别', visible: true },
   phonenumber: { label: '手机号码', visible: true },
   status: { label: '状态', visible: true },
   createTime: { label: '创建时间', visible: true }
@@ -278,6 +309,7 @@ const data = reactive({
     deptId: undefined
   },
   rules: {
+    deptId: [{ required: true, message: "归属班级不能为空", trigger: "change" }],
     userName: [{ required: true, message: "用户名称不能为空", trigger: "blur" }, { min: 2, max: 20, message: "用户名称长度必须介于 2 和 20 之间", trigger: "blur" }],
     nickName: [{ required: true, message: "用户昵称不能为空", trigger: "blur" }],
     password: [{ required: true, message: "用户密码不能为空", trigger: "blur" }, { min: 5, max: 20, message: "用户密码长度必须介于 5 和 20 之间", trigger: "blur" }, { pattern: /^[^<>"'|\\]+$/, message: "不能包含非法字符：< > \" ' \\\ |", trigger: "blur" }],
@@ -306,6 +338,7 @@ function getList() {
     loading.value = false
     userList.value = res.rows
     total.value = res.total
+    loadUserIdentityLabels()
   })
 }
 
@@ -314,6 +347,7 @@ function getDeptTree() {
   deptTreeSelect().then(response => {
     deptOptions.value = response.data
     enabledDeptOptions.value = filterDisabledDept(JSON.parse(JSON.stringify(response.data)))
+    buildDeptMetaMap()
   })
 }
 
@@ -328,6 +362,117 @@ function filterDisabledDept(deptList) {
     }
     return true
   })
+}
+
+function findDeptNodeById(tree, id) {
+  if (!tree || !id) return null
+  for (const node of tree) {
+    if (node.id === id) return node
+    if (node.children && node.children.length) {
+      const found = findDeptNodeById(node.children, id)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+function buildDeptMetaMap() {
+  const meta = {}
+  const walk = (nodes, path = []) => {
+    if (!nodes || !nodes.length) return
+    for (const node of nodes) {
+      const children = node.children || []
+      const nextPath = [...path, node.label]
+      const parsed = parseOrgPath(nextPath)
+      meta[node.id] = { ...parsed, isLeaf: children.length === 0 }
+      walk(children, nextPath)
+    }
+  }
+  walk(deptOptions.value || [])
+  deptMetaMap.value = meta
+}
+
+function parseOrgPath(pathLabels = []) {
+  const labels = [...pathLabels]
+  if (!labels.length) {
+    return { groupName: "大王集团", schoolName: "", className: "", orgPath: "-" }
+  }
+  if (labels.length === 1) {
+    if (labels[0].includes("集团")) {
+      return { groupName: labels[0], schoolName: "", className: "", orgPath: labels[0] }
+    }
+    return { groupName: "大王集团", schoolName: labels[0], className: "", orgPath: `大王集团/${labels[0]}` }
+  }
+  if (labels.length === 2) {
+    if (labels[0].includes("集团")) {
+      return { groupName: labels[0], schoolName: labels[1], className: "", orgPath: `${labels[0]}/${labels[1]}` }
+    }
+    return { groupName: "大王集团", schoolName: labels[0], className: labels[1], orgPath: `大王集团/${labels[0]}/${labels[1]}` }
+  }
+  const groupName = labels[0].includes("集团") ? labels[0] : "大王集团"
+  return {
+    groupName,
+    schoolName: labels[labels.length - 2],
+    className: labels[labels.length - 1],
+    orgPath: `${groupName}/${labels[labels.length - 2]}/${labels[labels.length - 1]}`
+  }
+}
+
+function resolveSchoolName(row) {
+  const meta = deptMetaMap.value[row.deptId]
+  if (meta && meta.schoolName) return meta.schoolName
+  return row?.dept?.deptName || "-"
+}
+
+function resolveClassName(row) {
+  const meta = deptMetaMap.value[row.deptId]
+  if (meta && meta.className) return meta.className
+  return "-"
+}
+
+function resolveOrgPath(row) {
+  const meta = deptMetaMap.value[row.deptId]
+  if (meta && meta.orgPath) return meta.orgPath
+  return "-"
+}
+
+function resolveIdentityLabel(row) {
+  return userIdentityMap.value[row.userId] || "未分配"
+}
+
+function resolvePermissionLevel(row) {
+  const identity = resolveIdentityLabel(row)
+  if (identity.includes("管理员")) return { label: "高", tag: "danger" }
+  if (identity.includes("老师")) return { label: "中", tag: "warning" }
+  if (identity.includes("学生")) return { label: "低", tag: "success" }
+  return { label: "-", tag: "info" }
+}
+
+async function loadUserIdentityLabels() {
+  const rows = userList.value || []
+  if (!rows.length) {
+    userIdentityMap.value = {}
+    return
+  }
+  const map = {}
+  await Promise.all(rows.map(async (row) => {
+    try {
+      const res = await getUser(row.userId)
+      const roles = res.roles || []
+      const roleIds = new Set((res.roleIds || []).map(id => Number(id)))
+      const roleKeys = roles
+        .filter(item => roleIds.size === 0 || roleIds.has(Number(item.roleId)))
+        .map(item => String(item.roleKey || "").toLowerCase())
+      const labels = []
+      if (roleKeys.some(key => key.includes("admin") || key.includes("manager"))) labels.push("管理员")
+      if (roleKeys.some(key => key.includes("teacher"))) labels.push("老师")
+      if (roleKeys.some(key => key.includes("student"))) labels.push("学生")
+      map[row.userId] = labels.length ? labels.join("、") : "未分配"
+    } catch (e) {
+      map[row.userId] = "未分配"
+    }
+  }))
+  userIdentityMap.value = map
 }
 
 /** 节点单击事件 */
@@ -532,6 +677,11 @@ function handleUpdate(row) {
 function submitForm() {
   proxy.$refs["userRef"].validate(valid => {
     if (valid) {
+      const selectedDept = findDeptNodeById(enabledDeptOptions.value || [], form.value.deptId)
+      if (!selectedDept || (selectedDept.children && selectedDept.children.length > 0)) {
+        proxy.$modal.msgWarning("请选择具体班级（学校下的二级节点）")
+        return
+      }
       if (form.value.userId != undefined) {
         updateUser(form.value).then(response => {
           proxy.$modal.msgSuccess("修改成功")

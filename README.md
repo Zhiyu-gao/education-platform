@@ -128,8 +128,8 @@ mvn spring-boot:run
 
 ```bash
 cd ai_service
-pip install fastapi uvicorn chromadb pandas scikit-learn tensorflow sqlalchemy pymysql dashscope joblib
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+uv add fastapi uvicorn chromadb pandas scikit-learn tensorflow sqlalchemy pymysql dashscope joblib
+uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### 6.5 启动前端（80）
@@ -177,3 +177,5 @@ npm run dev
 
 ---
 如果你后面要我继续做“建表 SQL 自动生成”或“一键启动脚本整合”，可直接基于这个 README 往下扩展。
+
+老师可以布置作业布置考试查看学生成绩，学生可以查看自己的作业查看自己的考试成绩，管理者可以看到所有班的成绩，管理者都是在主界面浏览，老师和学生都是在education文件夹下，然后老师和学生都可以用ai智能助手，比如rag和预测成绩，管理者也可以创建学生的作业和老师的任务，主要就是在主的管理界面会有个pad端入口，那里就是老师和学生，进去之后老师和学生会进行登录或者注册，之后根据不同的权限和任务看到不同的东西，比如老师可以布置作业，学生可以写作业

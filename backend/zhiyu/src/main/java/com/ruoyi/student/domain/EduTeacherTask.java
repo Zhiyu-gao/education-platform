@@ -1,0 +1,29 @@
+package com.ruoyi.student.domain;
+
+import java.util.Date;
+import com.ruoyi.common.core.domain.BaseEntity;
+
+public class EduTeacherTask extends BaseEntity {
+    private Long taskId;
+    private String title;
+    private String content;
+    private Long teacherId;
+    private String teacherName;
+    private Date dueTime;
+    private String status;
+
+    public Long getTaskId() { return taskId; }
+    public void setTaskId(Long taskId) { this.taskId = taskId; }
+    public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
+    public String getContent() { return content; }
+    public void setContent(String content) { this.content = content; }
+    public Long getTeacherId() { return teacherId; }
+    public void setTeacherId(Long teacherId) { this.teacherId = teacherId; }
+    public String getTeacherName() { return teacherName; }
+    public void setTeacherName(String teacherName) { this.teacherName = teacherName; }
+    public Date getDueTime() { return dueTime; }
+    public void setDueTime(Date dueTime) { this.dueTime = dueTime; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+}

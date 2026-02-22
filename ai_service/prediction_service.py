@@ -20,9 +20,10 @@ from sklearn.preprocessing import StandardScaler, LabelEncoder
 import joblib
 
 class PredictionService:
-    MODEL_PATH = './models/student_performance_model'
+    MODEL_PATH = './models/student_performance_model.keras'
     SCALER_PATH = './models/scaler.save'
     ENCODERS_PATH = './models/encoders.save'
+    FEATURE_NAMES_PATH = './models/feature_names.save'
     
     @staticmethod
     def _ensure_directory_exists(path):
@@ -121,6 +122,7 @@ class PredictionService:
             model.save(PredictionService.MODEL_PATH)
             joblib.dump(scaler, PredictionService.SCALER_PATH)
             joblib.dump(encoders, PredictionService.ENCODERS_PATH)
+            joblib.dump(list(feature_names), PredictionService.FEATURE_NAMES_PATH)
             
             return {
                 "status": "success",
@@ -149,14 +151,26 @@ class PredictionService:
             model = tf.keras.models.load_model(PredictionService.MODEL_PATH)
             scaler = joblib.load(PredictionService.SCALER_PATH)
             encoders = joblib.load(PredictionService.ENCODERS_PATH)
+            feature_names = joblib.load(PredictionService.FEATURE_NAMES_PATH)
             
             df_input = pd.DataFrame([input_data])
+            for col in feature_names:
+                if col not in df_input.columns:
+                    df_input[col] = np.nan
             
             for col, encoder in encoders.items():
-                if col in df_input.columns:
-                    df_input[col] = df_input[col].fillna(encoder.classes_[0])
-                    df_input[col] = df_input[col].map(lambda x: x if x in encoder.classes_ else encoder.classes_[0])
-                    df_input[col] = encoder.transform(df_input[col])
+                if col not in df_input.columns:
+                    df_input[col] = encoder.classes_[0]
+                df_input[col] = df_input[col].fillna(encoder.classes_[0])
+                df_input[col] = df_input[col].map(lambda x: x if x in encoder.classes_ else encoder.classes_[0])
+                df_input[col] = encoder.transform(df_input[col])
+
+            for col in feature_names:
+                if col not in encoders:
+                    df_input[col] = pd.to_numeric(df_input[col], errors='coerce').fillna(0.0)
+
+            # 严格按训练时顺序构造输入，避免StandardScaler因列顺序不一致报错
+            df_input = df_input[feature_names]
             
             input_scaled = scaler.transform(df_input)
             prediction = model.predict(input_scaled)[0][0]

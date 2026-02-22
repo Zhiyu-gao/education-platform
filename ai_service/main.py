@@ -20,18 +20,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 上传Excel文件接口（同时支持单文件和多文件上传）
+# 上传知识库文件接口（同时支持单文件和多文件上传）
 @app.post("/upload-excel")
 async def upload_excel(
     file: UploadFile = File(None),
     files: List[UploadFile] = File(None)
 ):
-    """支持单文件和多文件上传"""
+    """支持单文件和多文件上传（.xlsx/.xls/.txt）"""
+    allow_ext = (".xlsx", ".xls", ".txt")
     # 处理单文件上传
     if file and not files:
         # 验证文件格式
-        if not file.filename.endswith((".xlsx", ".xls")):
-            raise HTTPException(status_code=400, detail="请上传Excel文件（.xlsx或.xls）")
+        if not file.filename.lower().endswith(allow_ext):
+            raise HTTPException(status_code=400, detail="请上传 .xlsx / .xls / .txt 文件")
         
         # 生成唯一文件名（添加时间戳）
         import time
@@ -46,7 +47,7 @@ async def upload_excel(
         
         # 处理并导入数据库
         try:
-            result = RAGService.process_excel(file_path)
+            result = RAGService.process_file(file_path)
             return {"message": result}
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"处理文件时出错: {str(e)}")
@@ -58,11 +59,11 @@ async def upload_excel(
         
         for file_item in files:
             # 验证文件格式
-            if not file_item.filename.endswith((".xlsx", ".xls")):
+            if not file_item.filename.lower().endswith(allow_ext):
                 results.append({
                     "filename": file_item.filename,
                     "status": "error",
-                    "message": "请上传Excel文件（.xlsx或.xls）"
+                    "message": "请上传 .xlsx / .xls / .txt 文件"
                 })
                 continue
             
@@ -78,7 +79,7 @@ async def upload_excel(
             
             # 处理并导入数据库
             try:
-                result = RAGService.process_excel(file_path)
+                result = RAGService.process_file(file_path)
                 results.append({
                     "filename": file_item.filename,
                     "status": "success",

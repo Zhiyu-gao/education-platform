@@ -1,9 +1,6 @@
 # coding: utf-8
 from sqlalchemy import Column, DateTime, Float, Integer, String
-from sqlalchemy.ext.declarative import declarative_base
-
-Base = declarative_base()
-metadata = Base.metadata
+from database import Base
 
 
 class RagDataset(Base):

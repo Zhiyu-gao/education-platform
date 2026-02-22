@@ -150,7 +150,7 @@ const loading = ref(false)
 // 验证码开关
 const captchaEnabled = ref(true)
 // 注册开关
-const register = ref(false)
+const register = ref(true)
 const redirect = ref(undefined)
 
 watch(route, (newRoute) => {
@@ -227,7 +227,10 @@ getCookie()
   justify-content: center;
   align-items: center;
   height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background:
+    radial-gradient(circle at 14% 10%, rgba(2, 132, 199, 0.16) 0, transparent 28%),
+    radial-gradient(circle at 85% 90%, rgba(15, 118, 110, 0.16) 0, transparent 30%),
+    linear-gradient(145deg, #f3f8fc 0%, #edf6f3 50%, #f8f6ef 100%);
   position: relative;
   overflow: hidden;
 }
@@ -242,7 +245,7 @@ getCookie()
 .shape {
   position: absolute;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(2, 132, 199, 0.1);
   filter: blur(40px);
   animation: float 8s ease-in-out infinite;
 }
@@ -261,7 +264,7 @@ getCookie()
   bottom: -100px;
   right: -100px;
   animation-delay: 2s;
-  background: rgba(118, 75, 162, 0.2);
+  background: rgba(15, 118, 110, 0.14);
 }
 
 .shape-3 {
@@ -271,11 +274,11 @@ getCookie()
   left: 70%;
   transform: translate(-50%, -50%);
   animation-delay: 1s;
-  background: rgba(102, 126, 234, 0.2);
+  background: rgba(245, 158, 11, 0.14);
 }
 
 .login-form-wrapper {
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.96);
   border-radius: 20px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
   backdrop-filter: blur(15px);
@@ -293,7 +296,7 @@ getCookie()
     left: 0;
     width: 100%;
     height: 6px;
-    background: linear-gradient(90deg, #667eea, #764ba2, #667eea);
+    background: linear-gradient(90deg, #0f766e, #0284c7, #0f766e);
   }
 
   &:hover {
@@ -321,12 +324,12 @@ getCookie()
   width: 80px;
   height: 80px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: linear-gradient(135deg, #0f766e, #0284c7);
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 15px;
-  box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 10px 30px rgba(2, 132, 199, 0.3);
   animation: pulse 3s infinite;
   
   &::before {
@@ -337,7 +340,7 @@ getCookie()
     width: 100%;
     height: 100%;
     border-radius: 50%;
-    background: linear-gradient(135deg, #667eea, #764ba2);
+    background: linear-gradient(135deg, #0f766e, #0284c7);
     transform: translate(-50%, -50%) scale(1.1);
     opacity: 0.6;
     z-index: -1;
@@ -355,7 +358,7 @@ getCookie()
   color: #333;
   margin: 0 0 8px 0;
   text-align: center;
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: linear-gradient(135deg, #0f766e, #0284c7);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -403,8 +406,8 @@ getCookie()
   }
   
   &.el-input-focus {
-    border-color: #667eea;
-    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.15);
+    border-color: #0284c7;
+    box-shadow: 0 0 0 4px rgba(2, 132, 199, 0.15);
     transform: translateY(-1px);
   }
 }
@@ -416,7 +419,7 @@ getCookie()
   font-size: 18px;
   
   &:hover {
-    color: #667eea;
+    color: #0284c7;
   }
 }
 
@@ -473,12 +476,12 @@ getCookie()
 }
 
 .link-type {
-  color: #667eea;
+  color: #0284c7;
   text-decoration: none;
   transition: color 0.3s ease;
 
   &:hover {
-    color: #764ba2;
+    color: #0f766e;
     text-decoration: underline;
   }
 }
@@ -487,15 +490,15 @@ getCookie()
   height: 48px;
   font-size: 16px;
   font-weight: 500;
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: linear-gradient(135deg, #0f766e, #0284c7);
   border: none;
   border-radius: 8px;
   transition: all 0.3s ease;
 
   &:hover {
-    background: linear-gradient(135deg, #5a67d8, #6b46c1);
+    background: linear-gradient(135deg, #0e9274, #0b79ab);
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);
   }
 
   &:active {
@@ -508,7 +511,7 @@ getCookie()
   bottom: 20px;
   width: 100%;
   text-align: center;
-  color: rgba(255, 255, 255, 0.8);
+  color: #4b6478;
   font-size: 12px;
   font-family: Arial;
   letter-spacing: 0.5px;

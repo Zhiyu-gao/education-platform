@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 import com.ruoyi.common.constant.CacheConstants;
 import com.ruoyi.common.constant.Constants;
 import com.ruoyi.common.constant.UserConstants;
+import com.ruoyi.common.core.domain.entity.SysRole;
 import com.ruoyi.common.core.domain.entity.SysUser;
 import com.ruoyi.common.core.domain.model.RegisterBody;
 import com.ruoyi.common.core.redis.RedisCache;
@@ -16,6 +17,7 @@ import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.framework.manager.AsyncManager;
 import com.ruoyi.framework.manager.factory.AsyncFactory;
+import com.ruoyi.system.mapper.SysRoleMapper;
 import com.ruoyi.system.service.ISysConfigService;
 import com.ruoyi.system.service.ISysUserService;
 
@@ -27,6 +29,9 @@ import com.ruoyi.system.service.ISysUserService;
 @Component
 public class SysRegisterService
 {
+    private static final String DEFAULT_REGISTER_ROLE_KEY = "student";
+    private static final Long FALLBACK_REGISTER_ROLE_ID = 2L;
+
     @Autowired
     private ISysUserService userService;
 
@@ -35,6 +40,9 @@ public class SysRegisterService
 
     @Autowired
     private RedisCache redisCache;
+
+    @Autowired
+    private SysRoleMapper roleMapper;
 
     /**
      * 注册
@@ -79,6 +87,7 @@ public class SysRegisterService
             sysUser.setNickName(username);
             sysUser.setPwdUpdateDate(DateUtils.getNowDate());
             sysUser.setPassword(SecurityUtils.encryptPassword(password));
+            sysUser.setRoleIds(resolveRegisterRoleIds());
             boolean regFlag = userService.registerUser(sysUser);
             if (!regFlag)
             {
@@ -90,6 +99,16 @@ public class SysRegisterService
             }
         }
         return msg;
+    }
+
+    private Long[] resolveRegisterRoleIds()
+    {
+        SysRole defaultRole = roleMapper.checkRoleKeyUnique(DEFAULT_REGISTER_ROLE_KEY);
+        if (defaultRole != null && "0".equals(defaultRole.getStatus()))
+        {
+            return new Long[] { defaultRole.getRoleId() };
+        }
+        return new Long[] { FALLBACK_REGISTER_ROLE_ID };
     }
 
     /**

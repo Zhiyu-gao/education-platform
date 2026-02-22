@@ -1,0 +1,230 @@
+/* Pad 端统一视觉主题：auth / pad / rag / prediction / legacy dashboard */
+
+:root {
+  --pad-bg-a: #f3f7fb;
+  --pad-bg-b: #edf6f4;
+  --pad-bg-c: #f6f8ef;
+  --pad-card-bg: rgba(255, 255, 255, 0.9);
+  --pad-card-border: rgba(15, 23, 42, 0.08);
+  --pad-shadow: 0 14px 36px rgba(15, 23, 42, 0.08);
+  --pad-shadow-soft: 0 8px 24px rgba(15, 23, 42, 0.06);
+  --pad-primary-1: #0f766e;
+  --pad-primary-2: #0284c7;
+  --pad-accent: #f59e0b;
+  --pad-text-main: #0f172a;
+  --pad-text-sub: #475569;
+  --pad-radius-lg: 18px;
+  --pad-radius-md: 14px;
+}
+
+.edu-auth-page,
+.pad-page,
+.rag-shell,
+.prediction-container,
+.pad-fullscreen,
+.login-container,
+.home {
+  color: var(--pad-text-main) !important;
+  background:
+    radial-gradient(circle at 14% 12%, rgba(2, 132, 199, 0.14) 0, transparent 30%),
+    radial-gradient(circle at 86% 10%, rgba(15, 118, 110, 0.12) 0, transparent 28%),
+    linear-gradient(150deg, var(--pad-bg-a) 0%, var(--pad-bg-b) 52%, var(--pad-bg-c) 100%) !important;
+}
+
+.edu-auth-page .auth-card,
+.pad-page .el-card,
+.rag-shell .kb-sidebar,
+.rag-shell .chat-panel,
+.prediction-container .main-card,
+.pad-fullscreen .block-card,
+.home .el-card,
+.login-container .login-form-wrapper {
+  border-radius: var(--pad-radius-lg) !important;
+  background: var(--pad-card-bg) !important;
+  border: 1px solid var(--pad-card-border) !important;
+  box-shadow: var(--pad-shadow) !important;
+  backdrop-filter: blur(10px);
+}
+
+/* Ensure readable foreground colors on light card backgrounds */
+.edu-auth-page .el-card,
+.pad-page .el-card,
+.rag-shell .el-card,
+.prediction-container .el-card,
+.pad-fullscreen .el-card,
+.home .el-card,
+.edu-auth-page .el-form-item__label,
+.pad-page .el-form-item__label,
+.rag-shell .el-form-item__label,
+.prediction-container .el-form-item__label,
+.edu-auth-page .el-input__inner,
+.pad-page .el-input__inner,
+.rag-shell .el-input__inner,
+.prediction-container .el-input__inner,
+.home .el-input__inner,
+.edu-auth-page .el-textarea__inner,
+.pad-page .el-textarea__inner,
+.rag-shell .el-textarea__inner,
+.prediction-container .el-textarea__inner,
+.pad-page .message-post p,
+.pad-page .message-post strong,
+.pad-page .reply-item {
+  color: var(--pad-text-main) !important;
+}
+
+.pad-page .pad-header {
+  border-radius: var(--pad-radius-lg) !important;
+  padding: 12px 18px !important;
+}
+
+.pad-page .pad-header h2,
+.prediction-container .page-title,
+.rag-shell .chat-title-wrap h1,
+.edu-auth-page .auth-header h1 {
+  letter-spacing: 0.5px;
+  color: #0b3b51 !important;
+}
+
+.pad-page .pad-header p,
+.prediction-container .page-description,
+.rag-shell .chat-title-wrap span,
+.edu-auth-page .auth-header p {
+  color: var(--pad-text-sub) !important;
+}
+
+.pad-page .el-tabs__item.is-active,
+.prediction-container .el-tabs__item.is-active,
+.edu-auth-page .el-tabs__item.is-active {
+  color: var(--pad-primary-1) !important;
+  font-weight: 700;
+}
+
+.pad-page .el-tabs__active-bar,
+.prediction-container .el-tabs__active-bar,
+.edu-auth-page .el-tabs__active-bar {
+  background: linear-gradient(90deg, var(--pad-primary-1), var(--pad-primary-2)) !important;
+  height: 3px !important;
+  border-radius: 2px;
+}
+
+.pad-page .el-button--primary,
+.rag-shell .el-button--primary,
+.prediction-container .el-button--primary,
+.edu-auth-page .el-button--primary,
+.home .el-button--primary {
+  color: #ffffff !important;
+  border: none !important;
+  background: linear-gradient(120deg, var(--pad-primary-1), var(--pad-primary-2)) !important;
+  box-shadow: 0 10px 20px rgba(2, 132, 199, 0.22);
+}
+
+.pad-page .el-button--success,
+.prediction-container .el-button--success,
+.edu-auth-page .el-button--success,
+.home .el-button--success {
+  color: #ffffff !important;
+  border: none !important;
+  background: linear-gradient(120deg, #15803d, #16a34a) !important;
+  box-shadow: 0 10px 20px rgba(22, 163, 74, 0.2);
+}
+
+.pad-page .el-button--primary:hover,
+.pad-page .el-button--success:hover,
+.rag-shell .el-button--primary:hover,
+.prediction-container .el-button--primary:hover,
+.edu-auth-page .el-button--primary:hover,
+.edu-auth-page .el-button--success:hover {
+  transform: translateY(-1px);
+}
+
+.pad-page .el-input__wrapper,
+.pad-page .el-textarea__inner,
+.rag-shell .el-input__wrapper,
+.rag-shell .el-textarea__inner,
+.prediction-container .el-input__wrapper,
+.prediction-container .el-textarea__inner,
+.prediction-container .el-input-number,
+.edu-auth-page .el-input__wrapper,
+.home .el-input__wrapper {
+  border-radius: 12px !important;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.08) inset !important;
+  background: rgba(255, 255, 255, 0.94) !important;
+}
+
+.pad-page .el-input__wrapper.is-focus,
+.pad-page .el-textarea__inner:focus,
+.rag-shell .el-input__wrapper.is-focus,
+.rag-shell .el-textarea__inner:focus,
+.prediction-container .el-input__wrapper.is-focus,
+.prediction-container .el-textarea__inner:focus,
+.edu-auth-page .el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.2) !important;
+}
+
+.home .el-tag--primary {
+  border-color: rgba(2, 132, 199, 0.25) !important;
+  color: #0b5f86 !important;
+  background: rgba(2, 132, 199, 0.08) !important;
+}
+
+.pad-page .el-table,
+.prediction-container .el-table {
+  border-radius: var(--pad-radius-md);
+  overflow: hidden;
+}
+
+.pad-page .el-table th.el-table__cell,
+.prediction-container .el-table th.el-table__cell {
+  background: #f0f7fb !important;
+  color: #0f172a;
+}
+
+.pad-page .el-table tr:hover > td.el-table__cell,
+.prediction-container .el-table tr:hover > td.el-table__cell {
+  background: #f7fcff !important;
+}
+
+.rag-shell .chat-stream {
+  background:
+    linear-gradient(180deg, rgba(251, 253, 255, 0.95) 0%, rgba(245, 249, 252, 0.95) 100%) !important;
+}
+
+.rag-shell .chat-row.is-user .chat-bubble {
+  background: linear-gradient(135deg, #0f766e, #0284c7) !important;
+  color: #ffffff !important;
+}
+
+.rag-shell .chat-row.is-ai .chat-bubble {
+  background: #ffffff !important;
+  border-color: rgba(15, 23, 42, 0.1) !important;
+}
+
+.prediction-container .main-card,
+.prediction-container .model-card,
+.prediction-container .feature-card,
+.prediction-container .result-card {
+  border-radius: var(--pad-radius-lg) !important;
+}
+
+.prediction-container .alert-section {
+  border-radius: 12px !important;
+}
+
+.pad-page .bottom-actions {
+  background: rgba(255, 255, 255, 0.88) !important;
+  border-top: 1px solid rgba(15, 23, 42, 0.1) !important;
+  box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.pad-page .message-post,
+.pad-page .chart-card {
+  box-shadow: var(--pad-shadow-soft);
+}
+
+@media (max-width: 992px) {
+  .pad-page,
+  .prediction-container,
+  .rag-shell {
+    padding-top: 10px !important;
+  }
+}

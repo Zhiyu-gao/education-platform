@@ -32,8 +32,22 @@ const usePermissionStore = defineStore(
       setSidebarRouters(routes) {
         this.sidebarRouters = routes
       },
-      generateRoutes(roles) {
+      generateRoutes(roles = []) {
         return new Promise(resolve => {
+          const roleKeys = normalizeRoles(roles)
+          const isManager = isManagerRole(roleKeys)
+          const isPadOnly = !isManager
+
+          if (isPadOnly) {
+            const padRoutes = filterDynamicRoutes(dynamicRoutes, roleKeys)
+            this.setRoutes(padRoutes)
+            this.setSidebarRouters(constantRoutes.concat(padRoutes))
+            this.setDefaultRoutes(padRoutes)
+            this.setTopbarRoutes(padRoutes)
+            resolve(padRoutes)
+            return
+          }
+
           // 向后端请求路由数据
           getRouters().then(res => {
             const sdata = JSON.parse(JSON.stringify(res.data))
@@ -42,7 +56,7 @@ const usePermissionStore = defineStore(
             const sidebarRoutes = filterAsyncRouter(sdata)
             const rewriteRoutes = filterAsyncRouter(rdata, false, true)
             const defaultRoutes = filterAsyncRouter(defaultData)
-            const asyncRoutes = filterDynamicRoutes(dynamicRoutes)
+            const asyncRoutes = filterDynamicRoutes(dynamicRoutes, roleKeys)
             asyncRoutes.forEach(route => { router.addRoute(route) })
             this.setRoutes(rewriteRoutes)
             this.setSidebarRouters(constantRoutes.concat(sidebarRoutes))
@@ -97,20 +111,39 @@ function filterChildren(childrenMap, lastRouter = false) {
 }
 
 // 动态路由遍历，验证是否具备权限
-export function filterDynamicRoutes(routes) {
+export function filterDynamicRoutes(routes, roles = []) {
   const res = []
+  const roleKeys = normalizeRoles(roles)
   routes.forEach(route => {
-    if (route.permissions) {
-      if (auth.hasPermiOr(route.permissions)) {
-        res.push(route)
-      }
-    } else if (route.roles) {
-      if (auth.hasRoleOr(route.roles)) {
-        res.push(route)
-      }
+    const current = { ...route }
+    const children = current.children ? filterDynamicRoutes(current.children, roleKeys) : []
+    if (children.length > 0) {
+      current.children = children
+    }
+    const passByPerm = !current.permissions || auth.hasPermiOr(current.permissions)
+    const passByRole = !current.roles || hasRoleIn(current.roles, roleKeys)
+    if (passByPerm && passByRole) {
+      res.push(current)
+    } else if (children.length > 0) {
+      delete current.roles
+      delete current.permissions
+      res.push(current)
     }
   })
   return res
+}
+
+function normalizeRoles(roles = []) {
+  return roles.map(role => String(role || '').toLowerCase())
+}
+
+function hasRoleIn(routeRoles = [], currentRoles = []) {
+  const targetRoles = routeRoles.map(role => String(role || '').toLowerCase())
+  return targetRoles.some(role => currentRoles.includes(role))
+}
+
+function isManagerRole(currentRoles = []) {
+  return currentRoles.includes('admin') || currentRoles.includes('manager')
 }
 
 export const loadView = (view) => {

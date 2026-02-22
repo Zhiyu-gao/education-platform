@@ -30,6 +30,12 @@
             <artifactId>ruoyi-system</artifactId>
         </dependency>
         
+        <!-- RuoYi Framework -->
+        <dependency>
+            <groupId>com.ruoyi</groupId>
+            <artifactId>ruoyi-framework</artifactId>
+        </dependency>
+        
         <!-- POI for Excel processing -->
         <dependency>
             <groupId>org.apache.poi</groupId>

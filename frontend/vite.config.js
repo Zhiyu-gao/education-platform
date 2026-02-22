@@ -3,7 +3,7 @@ import path from 'path'
 import createVitePlugins from './vite/plugins'
 
 const baseUrl = 'http://localhost:8080' // 后端接口
-const ragBaseUrl = 'http://localhost:8000' // RAG服务接口
+const ragBaseUrl = 'http://127.0.0.1:8000' // RAG服务接口
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode, command }) => {
