@@ -1,0 +1,38 @@
+20:33:09.386 [main] INFO  c.r.RuoYiApplication - [logStarting,55] - Starting RuoYiApplication using Java 11.0.29 on ZhiyudeAir with PID 71330 (/Users/zhiyu/Documents/education-platform/backend/ruoyi-admin/target/ruoyi-admin.jar started by zhiyu in /Users/zhiyu/Documents/education-platform)
+20:33:09.389 [background-preinit] INFO  o.h.v.i.util.Version - [<clinit>,21] - HV000001: Hibernate Validator 6.2.5.Final
+20:33:09.390 [main] INFO  c.r.RuoYiApplication - [logStartupProfileInfo,686] - The following 1 profile is active: "druid"
+20:33:11.994 [main] INFO  o.a.c.h.Http11NioProtocol - [log,168] - Initializing ProtocolHandler ["http-nio-8080"]
+20:33:11.996 [main] INFO  o.a.c.c.StandardService - [log,168] - Starting service [Tomcat]
+20:33:11.996 [main] INFO  o.a.c.c.StandardEngine - [log,168] - Starting Servlet engine: [Apache Tomcat/9.0.108]
+20:33:12.117 [main] INFO  o.a.c.c.C.[.[.[/] - [log,168] - Initializing Spring embedded WebApplicationContext
+20:33:13.426 [main] INFO  c.a.d.p.DruidDataSource - [init,1002] - {dataSource-1} inited
+20:33:15.537 [main] INFO  c.a.d.p.DruidDataSource - [close,2204] - {dataSource-1} closing ...
+20:33:15.543 [main] INFO  c.a.d.p.DruidDataSource - [close,2277] - {dataSource-1} closed
+20:33:15.670 [main] INFO  o.a.c.c.StandardService - [log,168] - Stopping service [Tomcat]
+20:37:54.322 [main] INFO  c.r.RuoYiApplication - [logStarting,55] - Starting RuoYiApplication using Java 11.0.29 on ZhiyudeAir with PID 73746 (/Users/zhiyu/Documents/education-platform/backend/ruoyi-admin/target/ruoyi-admin.jar started by zhiyu in /Users/zhiyu/Documents/education-platform)
+20:37:54.325 [main] INFO  c.r.RuoYiApplication - [logStartupProfileInfo,686] - The following 1 profile is active: "druid"
+20:37:54.326 [background-preinit] INFO  o.h.v.i.util.Version - [<clinit>,21] - HV000001: Hibernate Validator 6.2.5.Final
+20:37:56.412 [main] INFO  o.a.c.h.Http11NioProtocol - [log,168] - Initializing ProtocolHandler ["http-nio-8080"]
+20:37:56.414 [main] INFO  o.a.c.c.StandardService - [log,168] - Starting service [Tomcat]
+20:37:56.414 [main] INFO  o.a.c.c.StandardEngine - [log,168] - Starting Servlet engine: [Apache Tomcat/9.0.108]
+20:37:56.485 [main] INFO  o.a.c.c.C.[.[.[/] - [log,168] - Initializing Spring embedded WebApplicationContext
+20:37:57.658 [main] INFO  c.a.d.p.DruidDataSource - [init,1002] - {dataSource-1} inited
+20:37:59.453 [main] INFO  o.q.i.StdSchedulerFactory - [instantiate,1220] - Using default implementation for ThreadExecutor
+20:37:59.464 [main] INFO  o.q.c.SchedulerSignalerImpl - [<init>,61] - Initialized Scheduler Signaller of type: class org.quartz.core.SchedulerSignalerImpl
+20:37:59.464 [main] INFO  o.q.c.QuartzScheduler - [<init>,229] - Quartz Scheduler v.2.3.2 created.
+20:37:59.465 [main] INFO  o.q.s.RAMJobStore - [initialize,155] - RAMJobStore initialized.
+20:37:59.466 [main] INFO  o.q.c.QuartzScheduler - [initialize,294] - Scheduler meta-data: Quartz Scheduler (v2.3.2) 'quartzScheduler' with instanceId 'NON_CLUSTERED'
+  Scheduler class: 'org.quartz.core.QuartzScheduler' - running locally.
+  NOT STARTED.
+  Currently in standby mode.
+  Number of jobs executed: 0
+  Using thread pool 'org.quartz.simpl.SimpleThreadPool' - with 10 threads.
+  Using job-store 'org.quartz.simpl.RAMJobStore' - which does not support persistence. and is not clustered.
+
+20:37:59.466 [main] INFO  o.q.i.StdSchedulerFactory - [instantiate,1374] - Quartz scheduler 'quartzScheduler' initialized from an externally provided properties instance.
+20:37:59.466 [main] INFO  o.q.i.StdSchedulerFactory - [instantiate,1378] - Quartz scheduler version: 2.3.2
+20:37:59.466 [main] INFO  o.q.c.QuartzScheduler - [setJobFactory,2293] - JobFactory set to: org.springframework.scheduling.quartz.SpringBeanJobFactory@3404e5c4
+20:38:00.684 [main] INFO  o.a.c.h.Http11NioProtocol - [log,168] - Starting ProtocolHandler ["http-nio-8080"]
+20:38:00.902 [main] INFO  o.q.c.QuartzScheduler - [start,547] - Scheduler quartzScheduler_$_NON_CLUSTERED started.
+20:38:00.913 [main] INFO  c.r.RuoYiApplication - [logStarted,61] - Started RuoYiApplication in 6.992 seconds (JVM running for 7.573)
+20:38:02.865 [http-nio-8080-exec-1] INFO  o.a.c.c.C.[.[.[/] - [log,168] - Initializing Spring DispatcherServlet 'dispatcherServlet'

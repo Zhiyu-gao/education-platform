@@ -265,6 +265,7 @@ const deptOptions = ref(undefined)
 const enabledDeptOptions = ref(undefined)
 const deptMetaMap = ref({})
 const userIdentityMap = ref({})
+const userIdentityCache = ref({})
 const initPassword = ref(undefined)
 const postOptions = ref([])
 const roleOptions = ref([])
@@ -454,8 +455,12 @@ async function loadUserIdentityLabels() {
     userIdentityMap.value = {}
     return
   }
-  const map = {}
+  const map = { ...userIdentityMap.value }
   await Promise.all(rows.map(async (row) => {
+    if (userIdentityCache.value[row.userId]) {
+      map[row.userId] = userIdentityCache.value[row.userId]
+      return
+    }
     try {
       const res = await getUser(row.userId)
       const roles = res.roles || []
@@ -468,8 +473,10 @@ async function loadUserIdentityLabels() {
       if (roleKeys.some(key => key.includes("teacher"))) labels.push("老师")
       if (roleKeys.some(key => key.includes("student"))) labels.push("学生")
       map[row.userId] = labels.length ? labels.join("、") : "未分配"
+      userIdentityCache.value[row.userId] = map[row.userId]
     } catch (e) {
       map[row.userId] = "未分配"
+      userIdentityCache.value[row.userId] = map[row.userId]
     }
   }))
   userIdentityMap.value = map

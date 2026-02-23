@@ -159,6 +159,23 @@
         order by e.exam_time desc
     </select>
 
+    <select id="selectExamScoreByTeacherId" parameterType="Long" resultType="java.util.Map">
+        select es.score_id,
+               es.exam_id,
+               e.title as exam_title,
+               e.class_name,
+               e.exam_time,
+               e.total_score,
+               es.student_id,
+               es.student_name,
+               es.score,
+               es.remark
+        from edu_exam_score es
+                 left join edu_exam e on es.exam_id = e.exam_id
+        where e.teacher_id = #{teacherId}
+        order by e.exam_time desc, es.score_id desc
+    </select>
+
     <select id="selectExamScoreAll" resultType="java.util.Map">
         select es.score_id,
                es.exam_id,

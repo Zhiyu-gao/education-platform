@@ -52,6 +52,10 @@ export function listStudentExamScore() {
   return request({ url: '/education/pad/exam/score/student', method: 'get' })
 }
 
+export function listTeacherExamScore() {
+  return request({ url: '/education/pad/exam/score/teacher', method: 'get' })
+}
+
 export function listManagerScores() {
   return request({ url: '/education/pad/manager/scores', method: 'get' })
 }
@@ -70,4 +74,8 @@ export function listTeacherTasks() {
 
 export function listTeacherScores() {
   return request({ url: '/education/pad/teacher/scores', method: 'get' })
+}
+
+export function aiSuggestReview(data) {
+  return request({ url: '/education/pad/review/ai-suggest', method: 'post', data })
 }

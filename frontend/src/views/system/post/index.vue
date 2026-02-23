@@ -68,12 +68,23 @@
          </el-col>
          <right-toolbar v-model:showSearch="showSearch" @queryTable="getList"></right-toolbar>
       </el-row>
+      <el-alert
+         title="身份管理规则：仅建议使用“管理员、老师、学生”，权限级别从高到低。"
+         type="info"
+         :closable="false"
+         style="margin-bottom: 12px"
+      />
 
       <el-table v-loading="loading" :data="postList" @selection-change="handleSelectionChange">
          <el-table-column type="selection" width="55" align="center" />
          <el-table-column label="编号" align="center" prop="postId" />
          <el-table-column label="身份编码" align="center" prop="postCode" />
          <el-table-column label="身份名称" align="center" prop="postName" />
+         <el-table-column label="权限级别" align="center" width="100">
+            <template #default="scope">
+               <el-tag :type="resolveLevel(scope.row).tag">{{ resolveLevel(scope.row).label }}</el-tag>
+            </template>
+         </el-table-column>
          <el-table-column label="岗位排序" align="center" prop="postSort" />
          <el-table-column label="状态" align="center" prop="status">
             <template #default="scope">
@@ -217,6 +228,14 @@ function handleIdentityChange(postName) {
   if (!form.value.postSort || form.value.postSort <= 0) {
     form.value.postSort = current.sort
   }
+}
+
+function resolveLevel(row) {
+  const name = String(row?.postName || "")
+  if (name.includes("管理员")) return { label: "高", tag: "danger" }
+  if (name.includes("老师")) return { label: "中", tag: "warning" }
+  if (name.includes("学生")) return { label: "低", tag: "success" }
+  return { label: "-", tag: "info" }
 }
 
 /** 搜索按钮操作 */

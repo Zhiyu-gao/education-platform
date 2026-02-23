@@ -6,6 +6,105 @@
         <p>致力于提供智能化的教育解决方案，助力学生成长和教师教学</p>
       </el-col>
     </el-row>
+
+    <!-- 首页架构总览 -->
+    <el-row :gutter="20" style="margin-bottom: 30px;">
+      <el-col :xs="24" :md="12">
+        <el-card class="arch-card">
+          <template #header>
+            <div class="card-header">
+              <i class="el-icon-share"></i>
+              <span>技术架构图（主控端 / Pad端 / 后端 / AI）</span>
+            </div>
+          </template>
+          <div class="arch-flow">
+            <div class="arch-node strong">统一入口</div>
+            <div class="arch-arrow">↓</div>
+            <div class="arch-row">
+              <div class="arch-node">主控端（管理界面）</div>
+              <div class="arch-node">Pad端入口</div>
+            </div>
+            <div class="arch-arrow">↓</div>
+            <div class="arch-row">
+              <div class="arch-group">
+                <h4>主控端角色</h4>
+                <el-tag type="danger">总管理员</el-tag>
+                <el-tag type="warning">学校管理员</el-tag>
+                <el-tag>业务管理者</el-tag>
+              </div>
+              <div class="arch-group">
+                <h4>Pad端角色</h4>
+                <el-tag type="success">老师（education）</el-tag>
+                <el-tag type="info">学生（education）</el-tag>
+              </div>
+            </div>
+            <div class="arch-arrow">↓</div>
+            <div class="arch-row">
+              <div class="arch-group service">
+                <h4>Spring Boot</h4>
+                <p>用户/角色/权限鉴权、作业/考试/成绩/任务、数据隔离</p>
+              </div>
+              <div class="arch-group service">
+                <h4>FastAPI</h4>
+                <p>AI能力：RAG检索问答、成绩预测</p>
+              </div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :md="12">
+        <el-card class="arch-card">
+          <template #header>
+            <div class="card-header">
+              <i class="el-icon-s-operation"></i>
+              <span>权限层级图（部门到人员）</span>
+            </div>
+          </template>
+          <div class="perm-flow">
+            <div class="perm-level">
+              <h4>总管理员（平台级）</h4>
+              <p>查看所有学校所有班级成绩；跨学校统计与监管</p>
+            </div>
+            <div class="arch-arrow">↓</div>
+            <div class="perm-level">
+              <h4>学校管理员（校级）</h4>
+              <p>查看本学校所有班级成绩；管理本学校任务与运营</p>
+            </div>
+            <div class="arch-arrow">↓</div>
+            <div class="perm-level">
+              <h4>老师（班级级）</h4>
+              <p>布置作业/考试；仅查看自己班级学生成绩；可用AI助手</p>
+            </div>
+            <div class="arch-arrow">↓</div>
+            <div class="perm-level">
+              <h4>学生（个人级）</h4>
+              <p>查看并提交自己的作业；仅查看自己的考试成绩；可用AI助手</p>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <el-row :gutter="20" style="margin-bottom: 30px;">
+      <el-col :span="24">
+        <el-card>
+          <template #header>
+            <div class="card-header">
+              <i class="el-icon-data-analysis"></i>
+              <span>权限矩阵（角色 × 功能）</span>
+            </div>
+          </template>
+          <el-table :data="permissionMatrix" border stripe>
+            <el-table-column prop="feature" label="功能" min-width="220" />
+            <el-table-column prop="superAdmin" label="总管理员" min-width="110" />
+            <el-table-column prop="schoolAdmin" label="学校管理员" min-width="130" />
+            <el-table-column prop="manager" label="业务管理者" min-width="120" />
+            <el-table-column prop="teacher" label="老师（Pad）" min-width="120" />
+            <el-table-column prop="student" label="学生（Pad）" min-width="120" />
+          </el-table>
+        </el-card>
+      </el-col>
+    </el-row>
     
     <!-- 主要功能模块 -->
     <el-row :gutter="20" style="margin-bottom: 30px;">
@@ -162,13 +261,22 @@
 </template>
 
 <script setup name="Index">
-import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 
-const version = ref('1.0.0')
 const techStack = ['tensorflow', 'vue3', 'elementplus', 'fastapi', 'langchain', 'LLM', 'RAG', 'nginx', 'docker']
 const router = useRouter()
+const permissionMatrix = [
+  { feature: '查看所有学校成绩', superAdmin: '✅', schoolAdmin: '❌', manager: '❌', teacher: '❌', student: '❌' },
+  { feature: '查看本学校所有班级成绩', superAdmin: '✅', schoolAdmin: '✅', manager: '✅（按授权）', teacher: '❌', student: '❌' },
+  { feature: '查看本班学生成绩', superAdmin: '❌', schoolAdmin: '✅（汇总视角）', manager: '✅（按授权）', teacher: '✅（仅自己班）', student: '❌' },
+  { feature: '查看个人成绩', superAdmin: '❌', schoolAdmin: '❌', manager: '❌', teacher: '❌', student: '✅（仅本人）' },
+  { feature: '创建学生作业任务', superAdmin: '✅', schoolAdmin: '✅', manager: '✅', teacher: '✅（本班）', student: '❌' },
+  { feature: '创建老师任务', superAdmin: '✅', schoolAdmin: '✅', manager: '✅', teacher: '❌', student: '❌' },
+  { feature: '布置考试', superAdmin: '✅（策略）', schoolAdmin: '✅（校级）', manager: '✅（按授权）', teacher: '✅（本班）', student: '❌' },
+  { feature: 'Pad端登录/注册后进入业务', superAdmin: '可进入（协同）', schoolAdmin: '可进入（协同）', manager: '可进入（协同）', teacher: '✅', student: '✅' },
+  { feature: 'AI助手（RAG/成绩预测）', superAdmin: '可选', schoolAdmin: '可选', manager: '可选', teacher: '✅', student: '✅' }
+]
 
 const otherFunctions = [
   { key: 'orgManage', name: '组织管理' },
@@ -186,10 +294,6 @@ const otherFunctions = [
   { key: 'feedback', name: '满意度调查' },
   { key: 'logout', name: '退出登录' }
 ]
-
-function goTarget(url) {
-  window.open(url, '__blank')
-}
 
 function goToFunction(key) {
   if (key === 'orgManage') {
@@ -281,7 +385,97 @@ function goToFunction(key) {
       }
     }
   }
-  
+
+  .arch-card {
+    height: 100%;
+  }
+
+  .arch-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .arch-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .arch-node {
+    background: #f8fafc;
+    border: 1px solid #dbeafe;
+    border-radius: 8px;
+    padding: 10px 12px;
+    text-align: center;
+    font-weight: 600;
+    color: #1e293b;
+  }
+
+  .arch-node.strong {
+    background: #e0f2fe;
+    border-color: #7dd3fc;
+  }
+
+  .arch-arrow {
+    text-align: center;
+    color: #0f766e;
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  .arch-group {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+
+    h4 {
+      margin: 0 0 6px 0;
+      width: 100%;
+      color: #0f172a;
+      font-size: 14px;
+    }
+  }
+
+  .arch-group.service {
+    p {
+      margin: 0;
+      font-size: 13px;
+      color: #475569;
+      line-height: 1.5;
+    }
+  }
+
+  .perm-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .perm-level {
+    background: #f8fafc;
+    border-left: 4px solid #0ea5e9;
+    border-radius: 8px;
+    padding: 10px 12px;
+
+    h4 {
+      margin: 0 0 6px 0;
+      color: #0f172a;
+      font-size: 14px;
+    }
+
+    p {
+      margin: 0;
+      color: #475569;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+  }
+
   .tech-stack {
     .card-body {
       display: flex;
@@ -295,6 +489,12 @@ function goToFunction(key) {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
       gap: 10px;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .arch-row {
+      grid-template-columns: 1fr;
     }
   }
 }

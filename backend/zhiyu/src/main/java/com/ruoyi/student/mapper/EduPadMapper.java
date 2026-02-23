@@ -31,6 +31,7 @@ public interface EduPadMapper {
     EduExam selectExamById(Long examId);
 
     int upsertExamScore(EduExamScore examScore);
+    List<Map<String, Object>> selectExamScoreByTeacherId(Long teacherId);
     List<Map<String, Object>> selectExamScoreByStudentId(Long studentId);
     List<Map<String, Object>> selectExamScoreAll();
 

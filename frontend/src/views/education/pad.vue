@@ -167,29 +167,22 @@
         </el-tab-pane>
 
         <el-tab-pane label="考试评分" name="score">
-          <el-row :gutter="16">
-            <el-col :span="10">
-              <el-card>
-                <el-form :model="examScoreForm" label-width="80px">
-                  <el-form-item label="考试ID"><el-input v-model="examScoreForm.examId" /></el-form-item>
-                  <el-form-item label="学生ID"><el-input v-model="examScoreForm.studentId" /></el-form-item>
-                  <el-form-item label="学生名"><el-input v-model="examScoreForm.studentName" /></el-form-item>
-                  <el-form-item label="分数"><el-input-number v-model="examScoreForm.score" :min="0" :max="200" /></el-form-item>
-                  <el-form-item><el-button type="success" @click="handleScoreExam">提交评分</el-button></el-form-item>
-                </el-form>
-              </el-card>
-            </el-col>
-            <el-col :span="14">
-              <el-card>
-                <el-table :data="teacherExam" size="small" height="360">
-                  <el-table-column prop="examId" label="ID" width="70" />
-                  <el-table-column prop="title" label="考试名" />
-                  <el-table-column prop="className" label="班级" />
-                  <el-table-column prop="totalScore" label="总分" width="80" />
-                </el-table>
-              </el-card>
-            </el-col>
-          </el-row>
+          <el-card>
+            <el-button @click="loadTeacherExamScores">刷新考试作答</el-button>
+            <el-table :data="teacherExamScores" size="small" height="380" style="margin-top: 12px;">
+              <el-table-column prop="exam_title" label="考试" />
+              <el-table-column prop="class_name" label="班级" width="110" />
+              <el-table-column prop="student_id" label="学生ID" width="90" />
+              <el-table-column prop="student_name" label="学生" width="110" />
+              <el-table-column prop="remark" label="作答" show-overflow-tooltip />
+              <el-table-column prop="score" label="分数" width="80" />
+              <el-table-column label="操作" width="100">
+                <template #default="{ row }">
+                  <el-button link type="primary" @click="openExamReview(row)">批改</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-card>
         </el-tab-pane>
 
         <el-tab-pane label="我的管理任务" name="task">
@@ -445,43 +438,120 @@
           </el-card>
         </el-tab-pane>
       </el-tabs>
-
-      <el-dialog v-model="submitDialog" title="提交作业" width="520px">
-        <el-form :model="submitForm" label-width="80px">
-          <el-form-item label="作业ID"><el-input v-model="submitForm.homeworkId" disabled /></el-form-item>
-          <el-form-item label="作答内容"><el-input v-model="submitForm.answerContent" type="textarea" :rows="5" /></el-form-item>
-        </el-form>
-        <template #footer>
-          <el-button @click="submitDialog = false">取消</el-button>
-          <el-button type="primary" @click="handleSubmitHomework">提交</el-button>
-        </template>
-      </el-dialog>
-
-      <el-dialog v-model="examSubmitDialog" title="提交考试作答" width="560px">
-        <el-form :model="examSubmitForm" label-width="80px">
-          <el-form-item label="考试ID"><el-input v-model="examSubmitForm.examId" disabled /></el-form-item>
-          <el-form-item label="考试名"><el-input v-model="examSubmitForm.examTitle" disabled /></el-form-item>
-          <el-form-item label="作答内容"><el-input v-model="examSubmitForm.answerContent" type="textarea" :rows="6" /></el-form-item>
-        </el-form>
-        <template #footer>
-          <el-button @click="examSubmitDialog = false">取消</el-button>
-          <el-button type="primary" @click="handleSubmitExam">提交</el-button>
-        </template>
-      </el-dialog>
-
-      <el-dialog v-model="homeworkReviewDialog" title="批改作业" width="520px">
-        <el-form :model="homeworkReviewForm" label-width="90px">
-          <el-form-item label="提交ID"><el-input v-model="homeworkReviewForm.submissionId" disabled /></el-form-item>
-          <el-form-item label="学生"><el-input v-model="homeworkReviewForm.studentName" disabled /></el-form-item>
-          <el-form-item label="分数"><el-input-number v-model="homeworkReviewForm.score" :min="0" :max="100" /></el-form-item>
-          <el-form-item label="评语"><el-input v-model="homeworkReviewForm.feedback" type="textarea" :rows="4" /></el-form-item>
-        </el-form>
-        <template #footer>
-          <el-button @click="homeworkReviewDialog = false">取消</el-button>
-          <el-button type="primary" @click="handleScoreHomework">提交批改</el-button>
-        </template>
-      </el-dialog>
     </template>
+
+    <el-dialog v-model="submitDialog" title="提交作业" width="520px">
+      <el-form :model="submitForm" label-width="80px">
+        <el-form-item label="作业ID"><el-input v-model="submitForm.homeworkId" disabled /></el-form-item>
+        <el-form-item label="作答内容"><el-input v-model="submitForm.answerContent" type="textarea" :rows="5" /></el-form-item>
+        <el-form-item label="作答图片">
+          <FileUpload
+            v-model="submitForm.answerImageUrl"
+            :limit="1"
+            :file-size="10"
+            :file-type="answerImageTypes"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="submitDialog = false">取消</el-button>
+        <el-button type="primary" @click="handleSubmitHomework">提交</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="examSubmitDialog" title="提交考试作答" width="560px">
+      <el-form :model="examSubmitForm" label-width="80px">
+        <el-form-item label="考试ID"><el-input v-model="examSubmitForm.examId" disabled /></el-form-item>
+        <el-form-item label="考试名"><el-input v-model="examSubmitForm.examTitle" disabled /></el-form-item>
+        <el-form-item label="作答内容"><el-input v-model="examSubmitForm.answerContent" type="textarea" :rows="6" /></el-form-item>
+        <el-form-item label="作答图片">
+          <FileUpload
+            v-model="examSubmitForm.answerImageUrl"
+            :limit="1"
+            :file-size="10"
+            :file-type="answerImageTypes"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="examSubmitDialog = false">取消</el-button>
+        <el-button type="primary" @click="handleSubmitExam">提交</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="reviewDialog" :title="reviewType === 'exam' ? '考试批改' : '作业批改'" width="980px">
+      <el-row :gutter="16">
+        <el-col :span="12">
+          <el-form :model="reviewForm" label-width="92px">
+            <el-form-item v-if="reviewType === 'homework'" label="提交ID"><el-input v-model="reviewForm.submissionId" disabled /></el-form-item>
+            <el-form-item v-if="reviewType === 'exam'" label="成绩ID"><el-input v-model="reviewForm.scoreId" disabled /></el-form-item>
+            <el-form-item v-if="reviewType === 'exam'" label="考试ID"><el-input v-model="reviewForm.examId" disabled /></el-form-item>
+            <el-form-item label="学生"><el-input v-model="reviewForm.studentName" disabled /></el-form-item>
+            <el-form-item label="题目">
+              <el-input v-model="reviewForm.title" disabled />
+            </el-form-item>
+            <el-form-item label="学生作答">
+              <el-input v-model="reviewForm.answerContent" type="textarea" :rows="6" />
+            </el-form-item>
+            <el-form-item label="作答图">
+              <el-image
+                v-if="reviewAnswerImageUrl"
+                :src="reviewAnswerImageUrl"
+                fit="contain"
+                style="width: 100%; height: 160px; border: 1px solid #dbe2ea; border-radius: 8px;"
+                :preview-src-list="[reviewAnswerImageUrl]"
+              />
+              <span v-else style="color: #94a3b8;">未检测到图片作答</span>
+            </el-form-item>
+            <el-form-item label="批注图片">
+              <input type="file" accept="image/*" @change="handleReviewImageUpload" />
+            </el-form-item>
+          </el-form>
+        </el-col>
+        <el-col :span="12">
+          <el-form :model="reviewForm" label-width="102px">
+            <el-form-item label="示例答案">
+              <el-input v-model="reviewForm.exampleAnswer" type="textarea" :rows="3" />
+            </el-form-item>
+            <el-form-item label="示例分数">
+              <el-input-number v-model="reviewForm.exampleScore" :min="0" :max="reviewForm.maxScore || 100" />
+            </el-form-item>
+            <el-form-item label="示例评语">
+              <el-input v-model="reviewForm.exampleFeedback" type="textarea" :rows="3" />
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" plain @click="handleAiSuggestReview">AI 批改建议</el-button>
+            </el-form-item>
+            <el-form-item label="人工分数">
+              <el-input-number v-model="reviewForm.score" :min="0" :max="reviewForm.maxScore || 100" />
+            </el-form-item>
+            <el-form-item label="人工评语">
+              <el-input v-model="reviewForm.feedback" type="textarea" :rows="3" />
+            </el-form-item>
+          </el-form>
+        </el-col>
+      </el-row>
+
+      <div class="review-canvas-panel">
+        <div class="review-toolbar">
+          <el-radio-group v-model="reviewCanvasTool" size="small">
+            <el-radio-button label="check">打勾</el-radio-button>
+            <el-radio-button label="cross">打叉</el-radio-button>
+            <el-radio-button label="text">文字</el-radio-button>
+          </el-radio-group>
+          <el-button size="small" @click="clearReviewCanvasMarks">清空批注</el-button>
+          <el-button size="small" type="primary" plain @click="exportReviewCanvas">导出批注图</el-button>
+        </div>
+        <div class="review-canvas-wrap">
+          <canvas ref="reviewCanvasRef" width="900" height="360" class="review-canvas" @click="onReviewCanvasClick" />
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="reviewDialog = false">取消</el-button>
+        <el-button type="primary" @click="handleSubmitReview">提交批改</el-button>
+      </template>
+    </el-dialog>
 
     <div class="bottom-actions" v-if="isTeacher || isStudent">
       <el-button type="primary" plain @click="goTo('/education/rag')">AI 智能问答（RAG）</el-button>
@@ -521,11 +591,13 @@ import {
   submitExam,
   scoreExam,
   listStudentExamScore,
+  listTeacherExamScore,
   listManagerScores,
   listStudentSelfScores,
   createTeacherTask,
   listTeacherTasks,
-  listTeacherScores
+  listTeacherScores,
+  aiSuggestReview
 } from '@/api/education/pad'
 import {
   listForumPosts,
@@ -548,7 +620,6 @@ const publishType = ref('homework')
 
 const homeworkForm = reactive({ title: '', className: '', content: '', publishMode: 'text', fileUrl: '' })
 const examForm = reactive({ title: '', className: '', totalScore: 100 })
-const examScoreForm = reactive({ examId: '', studentId: '', studentName: '', score: 0, remark: '' })
 const teacherTaskForm = reactive({ teacherId: '', teacherName: '', title: '', content: '', dueTime: null })
 const managerHomeworkForm = reactive({ title: '', className: '', content: '' })
 const classOptions = Array.from({ length: 5 }, (_, g) => g + 1)
@@ -557,6 +628,7 @@ const classOptions = Array.from({ length: 5 }, (_, g) => g + 1)
 const teacherHomework = ref([])
 const teacherSubmissions = ref([])
 const teacherExam = ref([])
+const teacherExamScores = ref([])
 const teacherTasks = ref([])
 const teacherScores = ref([])
 
@@ -596,11 +668,33 @@ let studentCompletionGaugeChart = null
 let studentRadarChart = null
 
 const submitDialog = ref(false)
-const submitForm = reactive({ homeworkId: '', answerContent: '' })
-const homeworkReviewDialog = ref(false)
-const homeworkReviewForm = reactive({ submissionId: '', studentName: '', score: 0, feedback: '' })
+const submitForm = reactive({ homeworkId: '', answerContent: '', answerImageUrl: '' })
+const reviewDialog = ref(false)
+const reviewType = ref('homework')
+const reviewForm = reactive({
+  submissionId: '',
+  scoreId: '',
+  examId: '',
+  studentId: '',
+  studentName: '',
+  title: '',
+  answerContent: '',
+  score: 0,
+  maxScore: 100,
+  feedback: '',
+  exampleAnswer: '',
+  exampleScore: 85,
+  exampleFeedback: ''
+})
+const reviewCanvasRef = ref(null)
+const reviewCanvasTool = ref('check')
+const reviewImageUrl = ref('')
+let reviewCanvas = null
+let reviewCanvasCtx = null
+let reviewCanvasImage = null
+const reviewCanvasMarks = ref([])
 const examSubmitDialog = ref(false)
-const examSubmitForm = reactive({ examId: '', examTitle: '', answerContent: '' })
+const examSubmitForm = reactive({ examId: '', examTitle: '', answerContent: '', answerImageUrl: '' })
 
 const goTo = (path) => router.push(path)
 const baseApi = import.meta.env.VITE_APP_BASE_API
@@ -609,6 +703,8 @@ const homeworkUploadTypes = computed(() => {
   if (homeworkForm.publishMode === 'pdf') return ['pdf']
   return ['txt']
 })
+const answerImageTypes = ['png', 'jpg', 'jpeg', 'webp']
+const reviewAnswerImageUrl = computed(() => extractImageUrl(reviewForm.answerContent))
 
 function buildHomeworkContent() {
   if (homeworkForm.publishMode === 'text') {
@@ -639,6 +735,149 @@ function openHomeworkAttachment(content) {
   }
   const url = attachment.url.startsWith('http') ? attachment.url : `${baseApi}${attachment.url}`
   window.open(url, '_blank')
+}
+
+function resolveFileUrl(url) {
+  const value = String(url || '').trim()
+  if (!value) return ''
+  return value.startsWith('http') ? value : `${baseApi}${value}`
+}
+
+function extractImageUrl(text) {
+  const value = String(text || '')
+  const markdownMatch = value.match(/!\[[^\]]*]\(([^)\s]+)\)/i)
+  if (markdownMatch && markdownMatch[1]) {
+    return resolveFileUrl(markdownMatch[1])
+  }
+  const plainMatch = value.match(/((https?:\/\/|\/)[^\s]+?\.(png|jpg|jpeg|gif|webp))/i)
+  if (plainMatch && plainMatch[1]) {
+    return resolveFileUrl(plainMatch[1])
+  }
+  return ''
+}
+
+async function handleAiSuggestReview() {
+  const targetAnswer = String(reviewForm.answerContent || '').trim()
+  if (!targetAnswer) {
+    ElMessage.warning('请先填写学生作答内容')
+    return
+  }
+  const res = await aiSuggestReview({
+    exampleAnswer: reviewForm.exampleAnswer,
+    exampleScore: reviewForm.exampleScore,
+    exampleFeedback: reviewForm.exampleFeedback,
+    targetAnswer,
+    maxScore: reviewForm.maxScore || 100
+  })
+  reviewForm.score = Number(res.suggestedScore ?? reviewForm.score)
+  reviewForm.feedback = res.suggestedFeedback || reviewForm.feedback
+  ElMessage.success(`已生成 AI 建议，相似度 ${Number(res.similarity || 0).toFixed(2)}`)
+}
+
+function initReviewCanvas() {
+  reviewCanvas = reviewCanvasRef.value
+  if (!reviewCanvas) return
+  reviewCanvasCtx = reviewCanvas.getContext('2d')
+  drawReviewCanvas()
+}
+
+function drawReviewCanvas() {
+  if (!reviewCanvas || !reviewCanvasCtx) return
+  reviewCanvasCtx.clearRect(0, 0, reviewCanvas.width, reviewCanvas.height)
+  reviewCanvasCtx.fillStyle = '#f8fafc'
+  reviewCanvasCtx.fillRect(0, 0, reviewCanvas.width, reviewCanvas.height)
+  if (reviewCanvasImage) {
+    reviewCanvasCtx.drawImage(reviewCanvasImage, 0, 0, reviewCanvas.width, reviewCanvas.height)
+  } else {
+    reviewCanvasCtx.fillStyle = '#64748b'
+    reviewCanvasCtx.font = '16px sans-serif'
+    reviewCanvasCtx.fillText('未加载作答图片，可上传图片后进行勾叉批注。', 24, 36)
+  }
+  for (const mark of reviewCanvasMarks.value) {
+    drawReviewMark(mark)
+  }
+}
+
+function drawReviewMark(mark) {
+  if (!reviewCanvasCtx) return
+  const { x, y, type, text } = mark
+  reviewCanvasCtx.lineWidth = 3
+  if (type === 'check') {
+    reviewCanvasCtx.strokeStyle = '#16a34a'
+    reviewCanvasCtx.beginPath()
+    reviewCanvasCtx.moveTo(x - 10, y)
+    reviewCanvasCtx.lineTo(x - 2, y + 10)
+    reviewCanvasCtx.lineTo(x + 14, y - 10)
+    reviewCanvasCtx.stroke()
+    return
+  }
+  if (type === 'cross') {
+    reviewCanvasCtx.strokeStyle = '#dc2626'
+    reviewCanvasCtx.beginPath()
+    reviewCanvasCtx.moveTo(x - 10, y - 10)
+    reviewCanvasCtx.lineTo(x + 10, y + 10)
+    reviewCanvasCtx.moveTo(x + 10, y - 10)
+    reviewCanvasCtx.lineTo(x - 10, y + 10)
+    reviewCanvasCtx.stroke()
+    return
+  }
+  reviewCanvasCtx.fillStyle = '#0f172a'
+  reviewCanvasCtx.font = '16px sans-serif'
+  reviewCanvasCtx.fillText(text || '批注', x, y)
+}
+
+function onReviewCanvasClick(event) {
+  if (!reviewCanvas) return
+  const rect = reviewCanvas.getBoundingClientRect()
+  const x = event.clientX - rect.left
+  const y = event.clientY - rect.top
+  if (reviewCanvasTool.value === 'text') {
+    const text = window.prompt('输入批注文字')
+    if (!text) return
+    reviewCanvasMarks.value.push({ type: 'text', x, y, text })
+  } else {
+    reviewCanvasMarks.value.push({ type: reviewCanvasTool.value, x, y })
+  }
+  drawReviewCanvas()
+}
+
+function clearReviewCanvasMarks() {
+  reviewCanvasMarks.value = []
+  drawReviewCanvas()
+}
+
+function exportReviewCanvas() {
+  if (!reviewCanvas) return
+  const link = document.createElement('a')
+  link.download = `review-${Date.now()}.png`
+  link.href = reviewCanvas.toDataURL('image/png')
+  link.click()
+}
+
+function loadReviewCanvasImage(url) {
+  if (!url) return
+  const image = new Image()
+  image.crossOrigin = 'anonymous'
+  image.onload = () => {
+    reviewCanvasImage = image
+    drawReviewCanvas()
+  }
+  image.onerror = () => {
+    reviewCanvasImage = null
+    drawReviewCanvas()
+  }
+  image.src = url
+}
+
+function handleReviewImageUpload(event) {
+  const file = event?.target?.files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    reviewImageUrl.value = String(reader.result || '')
+    loadReviewCanvasImage(reviewImageUrl.value)
+  }
+  reader.readAsDataURL(file)
 }
 
 function loadTeacherPublishData() {
@@ -683,26 +922,21 @@ async function loadTeacherHomeworkSubmissions() {
 }
 
 function openHomeworkReview(row) {
-  homeworkReviewForm.submissionId = row.submission_id
-  homeworkReviewForm.studentName = row.student_name || ''
-  homeworkReviewForm.score = Number(row.score ?? 0)
-  homeworkReviewForm.feedback = row.feedback || ''
-  homeworkReviewDialog.value = true
-}
-
-async function handleScoreHomework() {
-  if (!homeworkReviewForm.submissionId) {
-    ElMessage.warning('提交记录不能为空')
-    return
-  }
-  await scoreHomeworkApi({
-    submissionId: homeworkReviewForm.submissionId,
-    score: homeworkReviewForm.score,
-    feedback: homeworkReviewForm.feedback
-  })
-  ElMessage.success('作业批改成功')
-  homeworkReviewDialog.value = false
-  await loadTeacherHomeworkSubmissions()
+  reviewType.value = 'homework'
+  reviewForm.submissionId = row.submission_id
+  reviewForm.scoreId = ''
+  reviewForm.examId = ''
+  reviewForm.studentId = row.student_id
+  reviewForm.studentName = row.student_name || ''
+  reviewForm.title = row.homework_title || ''
+  reviewForm.answerContent = row.answer_content || ''
+  reviewForm.score = Number(row.score ?? 0)
+  reviewForm.maxScore = 100
+  reviewForm.feedback = row.feedback || ''
+  reviewForm.exampleAnswer = row.answer_content || ''
+  reviewForm.exampleScore = Number(row.score ?? 85)
+  reviewForm.exampleFeedback = row.feedback || ''
+  openReviewDialogWithAnswer()
 }
 
 async function loadStudentSubmissions() {
@@ -713,11 +947,25 @@ async function loadStudentSubmissions() {
 function openSubmit(row) {
   submitForm.homeworkId = row.homeworkId
   submitForm.answerContent = ''
+  submitForm.answerImageUrl = ''
   submitDialog.value = true
 }
 
+function buildAnswerContentWithImage(textValue, imageValue) {
+  const text = String(textValue || '').trim()
+  const imageUrl = String(imageValue || '').split(',')[0]
+  if (!imageUrl) return text
+  if (!text) return `![作答图片](${imageUrl})`
+  return `${text}\n![作答图片](${imageUrl})`
+}
+
 async function handleSubmitHomework() {
-  await submitHomework(submitForm.homeworkId, { answerContent: submitForm.answerContent })
+  const answerContent = buildAnswerContentWithImage(submitForm.answerContent, submitForm.answerImageUrl)
+  if (!answerContent) {
+    ElMessage.warning('请填写作答内容或上传作答图片')
+    return
+  }
+  await submitHomework(submitForm.homeworkId, { answerContent })
   ElMessage.success('作业提交成功')
   submitDialog.value = false
   loadStudentSubmissions()
@@ -735,10 +983,78 @@ async function loadTeacherExam() {
   teacherExam.value = res.data || []
 }
 
-async function handleScoreExam() {
-  await scoreExam(examScoreForm)
-  ElMessage.success('评分成功')
-  Object.assign(examScoreForm, { examId: '', studentId: '', studentName: '', score: 0, remark: '' })
+async function loadTeacherExamScores() {
+  const res = await listTeacherExamScore()
+  teacherExamScores.value = res.data || []
+}
+
+function openExamReview(row) {
+  reviewType.value = 'exam'
+  reviewForm.submissionId = ''
+  reviewForm.scoreId = row.score_id
+  reviewForm.examId = row.exam_id
+  reviewForm.studentId = row.student_id
+  reviewForm.studentName = row.student_name || ''
+  reviewForm.title = row.exam_title || ''
+  reviewForm.answerContent = row.remark || ''
+  reviewForm.maxScore = Number(row.total_score || 100)
+  reviewForm.score = Number(row.score ?? 0)
+  reviewForm.feedback = ''
+  reviewForm.exampleAnswer = row.remark || ''
+  reviewForm.exampleScore = Number(row.score ?? Math.min(85, reviewForm.maxScore))
+  reviewForm.exampleFeedback = ''
+  openReviewDialogWithAnswer()
+}
+
+function openReviewDialogWithAnswer() {
+  reviewDialog.value = true
+  reviewCanvasMarks.value = []
+  reviewImageUrl.value = ''
+  reviewCanvasImage = null
+  const maybeImageUrl = extractImageUrl(reviewForm.answerContent)
+  nextTick(() => {
+    initReviewCanvas()
+    if (maybeImageUrl) {
+      loadReviewCanvasImage(maybeImageUrl)
+    } else {
+      drawReviewCanvas()
+    }
+  })
+}
+
+async function handleSubmitReview() {
+  if (reviewType.value === 'homework') {
+    if (!reviewForm.submissionId) {
+      ElMessage.warning('提交记录不能为空')
+      return
+    }
+    await scoreHomeworkApi({
+      submissionId: reviewForm.submissionId,
+      score: reviewForm.score,
+      feedback: reviewForm.feedback
+    })
+    ElMessage.success('作业批改成功')
+    reviewDialog.value = false
+    await loadTeacherHomeworkSubmissions()
+    return
+  }
+  if (!reviewForm.examId || !reviewForm.studentId) {
+    ElMessage.warning('考试作答记录不完整')
+    return
+  }
+  const remark = reviewForm.feedback
+    ? `作答：${reviewForm.answerContent}\n评语：${reviewForm.feedback}`
+    : reviewForm.answerContent
+  await scoreExam({
+    examId: reviewForm.examId,
+    studentId: reviewForm.studentId,
+    studentName: reviewForm.studentName,
+    score: reviewForm.score,
+    remark
+  })
+  ElMessage.success('考试批改成功')
+  reviewDialog.value = false
+  await loadTeacherExamScores()
 }
 
 async function loadStudentExamScore() {
@@ -755,13 +1071,14 @@ function openExamSubmit(row) {
   examSubmitForm.examId = row.examId
   examSubmitForm.examTitle = row.title
   examSubmitForm.answerContent = ''
+  examSubmitForm.answerImageUrl = ''
   examSubmitDialog.value = true
 }
 
 async function handleSubmitExam() {
-  const answerContent = String(examSubmitForm.answerContent || '').trim()
+  const answerContent = buildAnswerContentWithImage(examSubmitForm.answerContent, examSubmitForm.answerImageUrl)
   if (!examSubmitForm.examId || !answerContent) {
-    ElMessage.warning('请填写作答内容')
+    ElMessage.warning('请填写作答内容或上传作答图片')
     return
   }
   await submitExam(examSubmitForm.examId, { answerContent })
@@ -984,6 +1301,9 @@ async function refreshStudentVisual() {
 }
 
 async function handleTeacherTabChange(name) {
+  if (name === 'score') {
+    await loadTeacherExamScores()
+  }
   if (name === 'visual') {
     await refreshTeacherVisual()
   }
@@ -1080,6 +1400,7 @@ onMounted(() => {
     loadTeacherHomework()
     loadTeacherHomeworkSubmissions()
     loadTeacherExam()
+    loadTeacherExamScores()
     loadTeacherTasks()
     loadTeacherScores()
     loadMessagePosts()
@@ -1190,6 +1511,31 @@ onBeforeUnmount(() => {
 }
 .chart-box {
   height: 250px;
+}
+.review-canvas-panel {
+  margin-top: 8px;
+  border: 1px solid #dbe2ea;
+  border-radius: 10px;
+  background: #ffffff;
+}
+.review-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e5eaf3;
+}
+.review-canvas-wrap {
+  padding: 12px;
+}
+.review-canvas {
+  width: 100%;
+  max-width: 100%;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+  cursor: crosshair;
 }
 .bottom-actions {
   position: fixed;
