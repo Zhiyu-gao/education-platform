@@ -76,11 +76,17 @@ public class CommonController
     {
         try
         {
+            log.info("文件上传请求(单文件): originalName={}, size={}, contentType={}",
+                    file == null ? null : file.getOriginalFilename(),
+                    file == null ? null : file.getSize(),
+                    file == null ? null : file.getContentType());
             // 上传文件路径
             String filePath = RuoYiConfig.getUploadPath();
             // 上传并返回新文件名称
             String fileName = FileUploadUtils.upload(filePath, file);
             String url = serverConfig.getUrl() + fileName;
+            log.info("文件上传成功(单文件): originalName={}, fileName={}, url={}",
+                    file == null ? null : file.getOriginalFilename(), fileName, url);
             AjaxResult ajax = AjaxResult.success();
             ajax.put("url", url);
             ajax.put("fileName", fileName);
@@ -90,6 +96,8 @@ public class CommonController
         }
         catch (Exception e)
         {
+            log.error("文件上传失败(单文件): originalName={}, reason={}",
+                    file == null ? null : file.getOriginalFilename(), e.getMessage(), e);
             return AjaxResult.error(e.getMessage());
         }
     }
@@ -102,6 +110,7 @@ public class CommonController
     {
         try
         {
+            log.info("文件上传请求(多文件): count={}", files == null ? 0 : files.size());
             // 上传文件路径
             String filePath = RuoYiConfig.getUploadPath();
             List<String> urls = new ArrayList<String>();
@@ -113,6 +122,8 @@ public class CommonController
                 // 上传并返回新文件名称
                 String fileName = FileUploadUtils.upload(filePath, file);
                 String url = serverConfig.getUrl() + fileName;
+                log.info("文件上传成功(多文件项): originalName={}, fileName={}, url={}",
+                        file == null ? null : file.getOriginalFilename(), fileName, url);
                 urls.add(url);
                 fileNames.add(fileName);
                 newFileNames.add(FileUtils.getName(fileName));
@@ -127,6 +138,7 @@ public class CommonController
         }
         catch (Exception e)
         {
+            log.error("文件上传失败(多文件): reason={}", e.getMessage(), e);
             return AjaxResult.error(e.getMessage());
         }
     }

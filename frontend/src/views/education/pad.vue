@@ -157,6 +157,24 @@
               <el-table-column prop="student_name" label="学生" width="120" />
               <el-table-column prop="answer_content" label="作答" show-overflow-tooltip />
               <el-table-column prop="score" label="分数" width="80" />
+              <el-table-column label="评语" min-width="160" show-overflow-tooltip>
+                <template #default="{ row }">
+                  {{ extractTeacherReasonFromFeedback(row.feedback) || '-' }}
+                </template>
+              </el-table-column>
+              <el-table-column label="批改图" width="86">
+                <template #default="{ row }">
+                  <el-button
+                    v-if="extractReviewImageFromFeedback(row.feedback)"
+                    link
+                    type="primary"
+                    @click="window.open(resolveFileUrl(extractReviewImageFromFeedback(row.feedback)), '_blank')"
+                  >
+                    查看
+                  </el-button>
+                  <span v-else>-</span>
+                </template>
+              </el-table-column>
               <el-table-column label="操作" width="100">
                 <template #default="{ row }">
                   <el-button link type="primary" @click="openHomeworkReview(row)">批改</el-button>
@@ -237,53 +255,80 @@
           </div>
         </el-tab-pane>
 
-        <el-tab-pane :label="`消息中心${messageUnreadTotal > 0 ? `（${messageUnreadTotal}）` : ''}`" name="message">
-          <el-row :gutter="16">
-            <el-col :span="10">
-              <el-card>
-                <template #header>老师给学生发消息</template>
-                <el-form :model="messageForm" label-width="72px">
-                  <el-form-item label="标题"><el-input v-model="messageForm.title" /></el-form-item>
-                  <el-form-item label="内容"><el-input v-model="messageForm.content" type="textarea" :rows="6" /></el-form-item>
-                  <el-form-item>
-                    <el-button type="primary" @click="sendMessageToStudent">发送消息</el-button>
-                  </el-form-item>
-                </el-form>
-              </el-card>
-            </el-col>
-            <el-col :span="14">
-              <el-card>
-                <template #header>
-                  <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>消息列表</span>
-                    <el-button link type="primary" @click="refreshMessages">刷新</el-button>
+        <el-tab-pane :label="`消息中心${chatContactCount > 0 ? `（${chatContactCount}）` : ''}`" name="message">
+          <el-card>
+            <template #header>
+              <div class="chat-header-line">
+                <span>班级私聊</span>
+                <el-button link type="primary" @click="loadChatData">刷新</el-button>
+              </div>
+            </template>
+            <div class="chat-layout">
+              <aside class="chat-contact-pane">
+                <div class="chat-mode-bar">
+                  <el-segmented v-model="chatMode" :options="[{ label: '私聊', value: 'dm' }, { label: '群聊', value: 'group' }]" @change="handleChatModeChange" />
+                </div>
+                <el-input v-model="chatKeyword" placeholder="搜索姓名或群名" clearable class="chat-search-input" />
+                <el-empty
+                  v-if="chatMode === 'dm' ? filteredChatContacts.length === 0 : filteredChatGroups.length === 0"
+                  :description="chatMode === 'dm' ? '暂无可联系对象' : '暂无群聊'"
+                  :image-size="60"
+                />
+                <div
+                  v-for="contact in (chatMode === 'dm' ? filteredChatContacts : filteredChatGroups)"
+                  :key="chatMode === 'dm' ? `dm-${contact.user_id}` : `gp-${contact.groupId || contact.group_id}`"
+                  :class="['chat-contact-item', {
+                    active: chatMode === 'dm'
+                      ? (activeChatTargetType === 'dm' && String(contact.user_id) === activeChatPeerId)
+                      : (activeChatTargetType === 'group' && String(contact.groupId || contact.group_id) === activeChatGroupId)
+                  }]"
+                  @click="chatMode === 'dm' ? selectChatContact(contact) : selectChatGroup(contact)"
+                >
+                  <div class="chat-avatar">
+                    {{ String(chatMode === 'dm' ? (contact.nick_name || '?') : (contact.groupName || contact.group_name || '群')).slice(0, 1) }}
                   </div>
-                </template>
-                <el-empty v-if="messagePosts.length === 0" description="暂无消息" />
-                <div v-for="post in messagePosts" :key="post.post_id" class="message-post">
-                  <div class="message-top">
-                    <strong>{{ post.title }}</strong>
-                    <span>{{ post.author_name }}（{{ post.author_role }}） · {{ post.create_time }}</span>
-                  </div>
-                  <p>{{ post.content }}</p>
-                  <el-input
-                    v-model="messageReplyMap[post.post_id]"
-                    placeholder="回复消息"
-                    size="small"
-                    @keyup.enter="replyMessage(post.post_id)"
-                  />
-                  <div class="reply-actions">
-                    <el-button size="small" link type="primary" @click="replyMessage(post.post_id)">回复</el-button>
-                  </div>
-                  <div v-if="post.replies && post.replies.length" class="reply-list">
-                    <div v-for="reply in post.replies" :key="reply.reply_id" class="reply-item">
-                      {{ reply.author_name }}：{{ reply.content }}
-                    </div>
+                  <div class="chat-contact-text">
+                    <strong>{{ chatMode === 'dm' ? (contact.nick_name || `用户${contact.user_id}`) : (contact.groupName || contact.group_name || '班级群') }}</strong>
+                    <span v-if="chatMode === 'dm'">{{ contact.class_name || '' }} · {{ contact.role_key === 'teacher' ? '老师' : '学生' }}</span>
+                    <span v-else>{{ contact.className || contact.class_name || '' }} · 群聊</span>
                   </div>
                 </div>
-              </el-card>
-            </el-col>
-          </el-row>
+              </aside>
+              <section class="chat-main-pane">
+                <div v-if="!activeChatTargetLabel" class="chat-empty">请选择左侧会话开始聊天</div>
+                <template v-else>
+                  <div class="chat-main-top">{{ activeChatTargetLabel }}</div>
+                  <div ref="chatBodyRef" class="chat-message-list" v-loading="chatListLoading">
+                    <el-empty v-if="chatMessages.length === 0 && !chatListLoading" description="暂无消息，发送第一条吧" :image-size="64" />
+                    <div
+                      v-for="item in chatMessages"
+                      :key="item.message_id"
+                      :class="['chat-message-row', { self: isSelfChatMessage(item) }]"
+                    >
+                      <div class="chat-bubble">
+                        <strong v-if="activeChatTargetType === 'group'" class="chat-sender-name" @click="openPrivateFromGroup(item)">
+                          {{ item.sender_name || `用户${item.sender_id}` }}
+                        </strong>
+                        <p>{{ item.content }}</p>
+                        <span>{{ item.create_time }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="chat-editor">
+                    <el-input
+                      v-model="chatInput"
+                      type="textarea"
+                      :rows="2"
+                      resize="none"
+                      placeholder="输入消息，回车发送"
+                      @keyup.enter.exact.prevent="sendChat"
+                    />
+                    <el-button type="primary" :loading="chatSending" @click="sendChat">发送</el-button>
+                  </div>
+                </template>
+              </section>
+            </div>
+          </el-card>
         </el-tab-pane>
       </el-tabs>
     </template>
@@ -291,89 +336,117 @@
     <template v-if="isStudent">
       <el-tabs v-model="studentActiveTab" @tab-change="handleStudentTabChange">
         <el-tab-pane label="我的作业" name="homework">
-          <el-row :gutter="16">
-            <el-col :span="12">
-              <el-card>
-                <el-button @click="loadStudentHomework">刷新作业</el-button>
-                <el-table :data="studentHomework" size="small" height="360" style="margin-top: 12px;">
-                  <el-table-column prop="homeworkId" label="ID" width="70" />
-                  <el-table-column prop="title" label="标题" />
-                  <el-table-column prop="className" label="班级" />
-                  <el-table-column label="附件" width="96">
-                    <template #default="{ row }">
-                      <el-button
-                        v-if="hasHomeworkAttachment(row.content)"
-                        link
-                        type="primary"
-                        @click="openHomeworkAttachment(row.content)"
-                      >
-                        查看
-                      </el-button>
-                      <span v-else>-</span>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="操作" width="120">
-                    <template #default="scope">
-                      <el-button link type="primary" @click="openSubmit(scope.row)">提交</el-button>
-                    </template>
-                  </el-table-column>
-                </el-table>
-              </el-card>
-            </el-col>
-            <el-col :span="12">
-              <el-card>
-                <el-button @click="loadStudentSubmissions">刷新我的提交</el-button>
-                <el-table :data="studentSubmissions" size="small" height="360" style="margin-top: 12px;">
-                  <el-table-column prop="homework_title" label="作业" />
-                  <el-table-column prop="score" label="分数" width="80" />
-                  <el-table-column prop="feedback" label="反馈" show-overflow-tooltip />
-                </el-table>
-              </el-card>
-            </el-col>
-          </el-row>
+          <el-card>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span>我的作业</span>
+              <el-button @click="loadStudentSubmissions">刷新</el-button>
+            </div>
+            <el-table :data="studentHomeworkMerged" size="small" height="420" style="margin-top: 12px;">
+              <el-table-column prop="homeworkId" label="ID" width="70" />
+              <el-table-column prop="title" label="标题" min-width="160" />
+              <el-table-column prop="className" label="班级" width="110" />
+              <el-table-column label="状态" width="96">
+                <template #default="{ row }">
+                  <el-tag v-if="row.statusLabel === '被打回'" type="danger" effect="light">被打回</el-tag>
+                  <el-tag v-else-if="row.statusLabel === '已完成'" type="success" effect="light">已完成</el-tag>
+                  <el-tag v-else type="info" effect="light">未完成</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="分数" width="86">
+                <template #default="{ row }">
+                  {{ row.score === null || row.score === undefined ? '--' : row.score }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="feedback" label="对错结果" min-width="180" show-overflow-tooltip />
+              <el-table-column label="批改图" width="86">
+                <template #default="{ row }">
+                  <el-button
+                    v-if="row.reviewImageUrl"
+                    link
+                    type="primary"
+                    @click="window.open(resolveFileUrl(row.reviewImageUrl), '_blank')"
+                  >
+                    查看
+                  </el-button>
+                  <span v-else>-</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="附件" width="86">
+                <template #default="{ row }">
+                  <el-button
+                    v-if="hasHomeworkAttachment(row.content)"
+                    link
+                    type="primary"
+                    @click="openHomeworkAttachment(row.content)"
+                  >
+                    查看
+                  </el-button>
+                  <span v-else>-</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="120">
+                <template #default="{ row }">
+                  <el-button
+                    v-if="row.statusLabel !== '已完成'"
+                    link
+                    type="primary"
+                    @click="openSubmit(row)"
+                  >
+                    提交
+                  </el-button>
+                  <span v-else>已提交</span>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-card>
         </el-tab-pane>
 
         <el-tab-pane label="我的考试成绩" name="exam">
-          <el-row :gutter="16">
-            <el-col :span="12">
-              <el-card>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                  <span>可参加考试</span>
-                  <el-button @click="loadStudentExamList">刷新考试</el-button>
-                </div>
-                <el-table :data="studentExams" size="small" height="360" style="margin-top: 12px;">
-                  <el-table-column prop="examId" label="ID" width="70" />
-                  <el-table-column prop="title" label="考试" />
-                  <el-table-column prop="className" label="班级" width="110" />
-                  <el-table-column label="操作" width="100">
-                    <template #default="{ row }">
-                      <el-button link type="primary" @click="openExamSubmit(row)">作答</el-button>
-                    </template>
-                  </el-table-column>
-                </el-table>
-              </el-card>
-            </el-col>
-            <el-col :span="12">
-              <el-card>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                  <span>考试评分结果</span>
-                  <el-button @click="loadStudentExamScore">刷新分数</el-button>
-                </div>
-                <el-table :data="studentExamScores" size="small" height="170" style="margin-top: 12px;">
-                  <el-table-column prop="exam_title" label="考试" />
-                  <el-table-column prop="score" label="分数" width="80" />
-                  <el-table-column prop="remark" label="评语/作答" show-overflow-tooltip />
-                </el-table>
-                <el-divider />
-                <el-button @click="loadStudentSelfScores">刷新总成绩</el-button>
-                <el-table :data="studentPerfScores" size="small" height="360" style="margin-top: 12px;">
-                  <el-table-column prop="student_id" label="学生ID" width="90" />
-                  <el-table-column prop="exam_score" label="总成绩" width="90" />
-                  <el-table-column prop="school_type" label="学校类型" />
-                </el-table>
-              </el-card>
-            </el-col>
-          </el-row>
+          <el-card>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span>我的考试（合并视图）</span>
+              <el-button @click="refreshStudentExamMerged">刷新</el-button>
+            </div>
+            <el-table :data="studentExamMerged" size="small" height="560" style="margin-top: 12px;">
+              <el-table-column prop="examId" label="ID" width="70" />
+              <el-table-column prop="title" label="考试" min-width="180" />
+              <el-table-column prop="className" label="班级" width="110" />
+              <el-table-column prop="totalScore" label="总分" width="80" />
+              <el-table-column label="我的分数" width="90">
+                <template #default="{ row }">
+                  {{ row.myScore === null || row.myScore === undefined ? '--' : row.myScore }}
+                </template>
+              </el-table-column>
+              <el-table-column label="班级均分" width="90">
+                <template #default>
+                  {{ classScoreStats.avgText }}
+                </template>
+              </el-table-column>
+              <el-table-column label="班级最高" width="90">
+                <template #default>
+                  {{ classScoreStats.maxText }}
+                </template>
+              </el-table-column>
+              <el-table-column label="班级最低" width="90">
+                <template #default>
+                  {{ classScoreStats.minText }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="remark" label="批改结果" min-width="200" show-overflow-tooltip />
+              <el-table-column label="状态" width="90">
+                <template #default="{ row }">
+                  <el-tag v-if="row.done" type="success" effect="light">已完成</el-tag>
+                  <el-tag v-else type="info" effect="light">未完成</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="100">
+                <template #default="{ row }">
+                  <el-button v-if="!row.done" link type="primary" @click="openExamSubmit(row)">作答</el-button>
+                  <span v-else>已完成</span>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-card>
         </el-tab-pane>
 
         <el-tab-pane label="数据可视化" name="visual">
@@ -405,35 +478,78 @@
           </div>
         </el-tab-pane>
 
-        <el-tab-pane :label="`消息中心${messageUnreadTotal > 0 ? `（${messageUnreadTotal}）` : ''}`" name="message">
+        <el-tab-pane :label="`消息中心${chatContactCount > 0 ? `（${chatContactCount}）` : ''}`" name="message">
           <el-card>
             <template #header>
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span>老师消息</span>
-                <el-button link type="primary" @click="refreshMessages">刷新</el-button>
+              <div class="chat-header-line">
+                <span>班级私聊</span>
+                <el-button link type="primary" @click="loadChatData">刷新</el-button>
               </div>
             </template>
-            <el-empty v-if="messagePosts.length === 0" description="暂无消息" />
-            <div v-for="post in messagePosts" :key="post.post_id" class="message-post">
-              <div class="message-top">
-                <strong>{{ post.title }}</strong>
-                <span>{{ post.author_name }}（{{ post.author_role }}） · {{ post.create_time }}</span>
-              </div>
-              <p>{{ post.content }}</p>
-              <el-input
-                v-model="messageReplyMap[post.post_id]"
-                placeholder="回复老师消息"
-                size="small"
-                @keyup.enter="replyMessage(post.post_id)"
-              />
-              <div class="reply-actions">
-                <el-button size="small" link type="primary" @click="replyMessage(post.post_id)">回复</el-button>
-              </div>
-              <div v-if="post.replies && post.replies.length" class="reply-list">
-                <div v-for="reply in post.replies" :key="reply.reply_id" class="reply-item">
-                  {{ reply.author_name }}：{{ reply.content }}
+            <div class="chat-layout">
+              <aside class="chat-contact-pane">
+                <div class="chat-mode-bar">
+                  <el-segmented v-model="chatMode" :options="[{ label: '私聊', value: 'dm' }, { label: '群聊', value: 'group' }]" @change="handleChatModeChange" />
                 </div>
-              </div>
+                <el-input v-model="chatKeyword" placeholder="搜索姓名或群名" clearable class="chat-search-input" />
+                <el-empty
+                  v-if="chatMode === 'dm' ? filteredChatContacts.length === 0 : filteredChatGroups.length === 0"
+                  :description="chatMode === 'dm' ? '暂无可联系对象' : '暂无群聊'"
+                  :image-size="60"
+                />
+                <div
+                  v-for="contact in (chatMode === 'dm' ? filteredChatContacts : filteredChatGroups)"
+                  :key="chatMode === 'dm' ? `dm-${contact.user_id}` : `gp-${contact.groupId || contact.group_id}`"
+                  :class="['chat-contact-item', {
+                    active: chatMode === 'dm'
+                      ? (activeChatTargetType === 'dm' && String(contact.user_id) === activeChatPeerId)
+                      : (activeChatTargetType === 'group' && String(contact.groupId || contact.group_id) === activeChatGroupId)
+                  }]"
+                  @click="chatMode === 'dm' ? selectChatContact(contact) : selectChatGroup(contact)"
+                >
+                  <div class="chat-avatar">
+                    {{ String(chatMode === 'dm' ? (contact.nick_name || '?') : (contact.groupName || contact.group_name || '群')).slice(0, 1) }}
+                  </div>
+                  <div class="chat-contact-text">
+                    <strong>{{ chatMode === 'dm' ? (contact.nick_name || `用户${contact.user_id}`) : (contact.groupName || contact.group_name || '班级群') }}</strong>
+                    <span v-if="chatMode === 'dm'">{{ contact.class_name || '' }} · {{ contact.role_key === 'teacher' ? '老师' : '学生' }}</span>
+                    <span v-else>{{ contact.className || contact.class_name || '' }} · 群聊</span>
+                  </div>
+                </div>
+              </aside>
+              <section class="chat-main-pane">
+                <div v-if="!activeChatTargetLabel" class="chat-empty">请选择左侧会话开始聊天</div>
+                <template v-else>
+                  <div class="chat-main-top">{{ activeChatTargetLabel }}</div>
+                  <div ref="chatBodyRef" class="chat-message-list" v-loading="chatListLoading">
+                    <el-empty v-if="chatMessages.length === 0 && !chatListLoading" description="暂无消息，发送第一条吧" :image-size="64" />
+                    <div
+                      v-for="item in chatMessages"
+                      :key="item.message_id"
+                      :class="['chat-message-row', { self: isSelfChatMessage(item) }]"
+                    >
+                      <div class="chat-bubble">
+                        <strong v-if="activeChatTargetType === 'group'" class="chat-sender-name" @click="openPrivateFromGroup(item)">
+                          {{ item.sender_name || `用户${item.sender_id}` }}
+                        </strong>
+                        <p>{{ item.content }}</p>
+                        <span>{{ item.create_time }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="chat-editor">
+                    <el-input
+                      v-model="chatInput"
+                      type="textarea"
+                      :rows="2"
+                      resize="none"
+                      placeholder="输入消息，回车发送"
+                      @keyup.enter.exact.prevent="sendChat"
+                    />
+                    <el-button type="primary" :loading="chatSending" @click="sendChat">发送</el-button>
+                  </div>
+                </template>
+              </section>
             </div>
           </el-card>
         </el-tab-pane>
@@ -521,12 +637,17 @@
             </el-form-item>
             <el-form-item>
               <el-button type="primary" plain @click="handleAiSuggestReview">AI 批改建议</el-button>
+              <el-button type="success" plain :loading="aiImageGrading" @click="handleAiImageGrade">AI图像批改</el-button>
             </el-form-item>
             <el-form-item label="人工分数">
               <el-input-number v-model="reviewForm.score" :min="0" :max="reviewForm.maxScore || 100" />
             </el-form-item>
             <el-form-item label="人工评语">
               <el-input v-model="reviewForm.feedback" type="textarea" :rows="3" />
+            </el-form-item>
+            <el-form-item label="批改结果图">
+              <el-button size="small" @click="exportReviewCanvas">下载预览图</el-button>
+              <span v-if="reviewForm.reviewImageUrl" style="margin-left: 8px; color: #64748b;">已绑定批改图</span>
             </el-form-item>
           </el-form>
         </el-col>
@@ -573,15 +694,17 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as echarts from 'echarts'
 import useUserStore from '@/store/modules/user'
+import { getToken } from '@/utils/auth'
 import {
   createHomework,
   listTeacherHomework,
   listStudentHomework,
   submitHomework,
+  uploadHomeworkAttachment,
   listTeacherHomeworkSubmissions,
   listStudentHomeworkSubmissions,
   scoreHomework as scoreHomeworkApi,
@@ -600,14 +723,17 @@ import {
   aiSuggestReview
 } from '@/api/education/pad'
 import {
-  listForumPosts,
-  createForumPost,
-  replyForumPost as replyForumPostApi,
-  getForumNotice,
-  markForumRead
+  listChatContacts,
+  listChatMessages,
+  sendChatMessage,
+  listChatGroups,
+  listGroupChatMessages,
+  sendGroupChatMessage
 } from '@/api/education/forum'
+import { aiGradeSingle } from '@/api/education/aiGrading'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 
 const roles = computed(() => (userStore.roles || []).map(r => String(r).toLowerCase()))
@@ -637,13 +763,95 @@ const studentSubmissions = ref([])
 const studentExams = ref([])
 const studentExamScores = ref([])
 const studentPerfScores = ref([])
+const classScoreStats = computed(() => {
+  const values = (studentPerfScores.value || [])
+    .map(row => Number(row.exam_score))
+    .filter(num => Number.isFinite(num))
+  if (!values.length) {
+    return { avg: null, max: null, min: null, avgText: '--', maxText: '--', minText: '--' }
+  }
+  const sum = values.reduce((a, b) => a + b, 0)
+  const avg = sum / values.length
+  const max = Math.max(...values)
+  const min = Math.min(...values)
+  return {
+    avg,
+    max,
+    min,
+    avgText: avg.toFixed(1),
+    maxText: max.toFixed(0),
+    minText: min.toFixed(0)
+  }
+})
+const studentExamMerged = computed(() => {
+  const scoreMap = new Map()
+  ;(studentExamScores.value || []).forEach((item) => {
+    const key = Number(item.exam_id || item.examId)
+    if (!Number.isFinite(key)) return
+    scoreMap.set(key, item)
+  })
+  const merged = (studentExams.value || []).map((exam) => {
+    const examId = Number(exam.examId || exam.exam_id)
+    const scoreRow = scoreMap.get(examId)
+    const myScoreRaw = scoreRow?.score
+    const myScore = myScoreRaw === null || myScoreRaw === undefined ? null : Number(myScoreRaw)
+    return {
+      examId,
+      title: exam.title || '',
+      className: exam.className || exam.class_name || '',
+      totalScore: exam.totalScore || exam.total_score || 100,
+      myScore: Number.isFinite(myScore) ? myScore : null,
+      remark: scoreRow?.remark || '--',
+      done: Number.isFinite(myScore)
+    }
+  })
+  return merged
+})
+const studentHomeworkMerged = computed(() => {
+  const submissionMap = new Map()
+  ;(studentSubmissions.value || []).forEach((item) => {
+    const key = item.homework_id || item.homeworkId
+    if (!key || submissionMap.has(key)) return
+    submissionMap.set(key, item)
+  })
+
+  return (studentHomework.value || []).map((homework) => {
+    const key = homework.homeworkId || homework.homework_id
+    const submission = submissionMap.get(key)
+    const rawFeedback = String(submission?.feedback || '')
+    const feedback = extractStudentResultFromFeedback(rawFeedback) || (submission ? '已批改' : '')
+    const reviewImageUrl = extractReviewImageFromFeedback(rawFeedback)
+    const isRejected = /打回|退回|重做/.test(feedback)
+    let statusLabel = '未完成'
+    if (submission) {
+      statusLabel = isRejected ? '被打回' : '已完成'
+    }
+    return {
+      ...homework,
+      score: submission?.score,
+      feedback,
+      reviewImageUrl,
+      answer_content: submission?.answer_content || '',
+      statusLabel
+    }
+  })
+})
 
 const managerExamScores = ref([])
 const managerPerfScores = ref([])
-const messageForm = reactive({ title: '', content: '' })
-const messagePosts = ref([])
-const messageReplyMap = reactive({})
-const messageUnreadTotal = ref(0)
+const chatContacts = ref([])
+const chatGroups = ref([])
+const chatKeyword = ref('')
+const chatMode = ref('dm')
+const activeChatTargetType = ref('dm')
+const activeChatPeerId = ref('')
+const activeChatGroupId = ref('')
+const chatMessages = ref([])
+const chatInput = ref('')
+const chatListLoading = ref(false)
+const chatSending = ref(false)
+const chatBodyRef = ref(null)
+const chatContactCount = ref(0)
 const profileDialogVisible = ref(false)
 const profileInfo = reactive({
   userName: '',
@@ -682,6 +890,8 @@ const reviewForm = reactive({
   score: 0,
   maxScore: 100,
   feedback: '',
+  reviewImageUrl: '',
+  studentResultText: '',
   exampleAnswer: '',
   exampleScore: 85,
   exampleFeedback: ''
@@ -698,13 +908,47 @@ const examSubmitForm = reactive({ examId: '', examTitle: '', answerContent: '', 
 
 const goTo = (path) => router.push(path)
 const baseApi = import.meta.env.VITE_APP_BASE_API
+const aiBaseApi = String(import.meta.env.VITE_AI_BASE_API || '').trim().replace(/\/$/, '')
 const homeworkUploadTypes = computed(() => {
   if (homeworkForm.publishMode === 'word') return ['doc', 'docx']
   if (homeworkForm.publishMode === 'pdf') return ['pdf']
   return ['txt']
 })
-const answerImageTypes = ['png', 'jpg', 'jpeg', 'webp']
+const answerImageTypes = ['png', 'jpg', 'jpeg', 'bmp', 'gif']
 const reviewAnswerImageUrl = computed(() => extractImageUrl(reviewForm.answerContent))
+const REVIEW_IMAGE_MARKER = '[REVIEW_IMAGE]'
+const TEACHER_REASON_START = '[TEACHER_REASON]'
+const TEACHER_REASON_END = '[/TEACHER_REASON]'
+const STUDENT_RESULT_START = '[STUDENT_RESULT]'
+const STUDENT_RESULT_END = '[/STUDENT_RESULT]'
+const aiImageGrading = ref(false)
+
+const filteredChatContacts = computed(() => {
+  const keyword = String(chatKeyword.value || '').trim().toLowerCase()
+  if (!keyword) return chatContacts.value
+  return (chatContacts.value || []).filter((item) => {
+    const name = String(item?.nick_name || item?.user_name || item?.user_id || '').toLowerCase()
+    return name.includes(keyword)
+  })
+})
+
+const filteredChatGroups = computed(() => {
+  const keyword = String(chatKeyword.value || '').trim().toLowerCase()
+  if (!keyword) return chatGroups.value
+  return (chatGroups.value || []).filter((item) => {
+    const name = String(item?.groupName || item?.group_name || item?.groupId || '').toLowerCase()
+    return name.includes(keyword)
+  })
+})
+
+const activeChatTargetLabel = computed(() => {
+  if (activeChatTargetType.value === 'group') {
+    const target = (chatGroups.value || []).find((g) => String(g.groupId || g.group_id) === activeChatGroupId.value)
+    return target ? String(target.groupName || target.group_name || '班级群聊') : ''
+  }
+  const peer = (chatContacts.value || []).find((item) => normalizeUserId(item.user_id) === activeChatPeerId.value)
+  return peer ? String(peer.nick_name || `用户${peer.user_id}`) : ''
+})
 
 function buildHomeworkContent() {
   if (homeworkForm.publishMode === 'text') {
@@ -733,14 +977,27 @@ function openHomeworkAttachment(content) {
     ElMessage.warning('该作业没有附件')
     return
   }
-  const url = attachment.url.startsWith('http') ? attachment.url : `${baseApi}${attachment.url}`
+  const url = resolveFileUrl(attachment.url)
   window.open(url, '_blank')
 }
 
 function resolveFileUrl(url) {
   const value = String(url || '').trim()
   if (!value) return ''
-  return value.startsWith('http') ? value : `${baseApi}${value}`
+  if (value.startsWith('http')) return value
+  // 已经包含网关前缀时，不再重复拼接，避免出现 /dev-api/dev-api/...
+  if (/^\/(dev-api|prod-api|stage-api)\b/.test(value)) return value
+  // AI 批改图由 AI 服务静态目录 /files 提供
+  if (/^\/?files\//.test(value)) {
+    const normalizedAiPath = value.startsWith('/') ? value : `/${value}`
+    return aiBaseApi ? `${aiBaseApi}${normalizedAiPath}` : normalizedAiPath
+  }
+  const normalizedBase = String(baseApi || '').trim().replace(/\/$/, '')
+  const normalizedPath = value.startsWith('/') ? value : `/${value}`
+  if (normalizedBase && normalizedPath.startsWith(`${normalizedBase}/`)) {
+    return normalizedPath
+  }
+  return `${normalizedBase}${normalizedPath}`
 }
 
 function extractImageUrl(text) {
@@ -754,6 +1011,141 @@ function extractImageUrl(text) {
     return resolveFileUrl(plainMatch[1])
   }
   return ''
+}
+
+function extractReviewImageFromFeedback(feedback) {
+  const value = String(feedback || '')
+  const match = value.match(/\[REVIEW_IMAGE\]\(([^)\s]+)\)/i)
+  return match?.[1] || ''
+}
+
+function stripReviewImageFromFeedback(feedback) {
+  return String(feedback || '')
+    .replace(/\n?\[REVIEW_IMAGE\]\(([^)\s]+)\)\s*/ig, '')
+    .trim()
+}
+
+function extractBlock(text, startTag, endTag) {
+  const value = String(text || '')
+  const start = value.indexOf(startTag)
+  if (start < 0) return ''
+  const from = start + startTag.length
+  const end = value.indexOf(endTag, from)
+  if (end < 0) return value.slice(from).trim()
+  return value.slice(from, end).trim()
+}
+
+function stripBlock(text, startTag, endTag) {
+  const value = String(text || '')
+  const start = value.indexOf(startTag)
+  if (start < 0) return value
+  const end = value.indexOf(endTag, start + startTag.length)
+  if (end < 0) return value.slice(0, start).trim()
+  return `${value.slice(0, start)}${value.slice(end + endTag.length)}`.trim()
+}
+
+function extractTeacherReasonFromFeedback(feedback) {
+  const reason = extractBlock(feedback, TEACHER_REASON_START, TEACHER_REASON_END)
+  if (reason) return reason
+  const plain = stripReviewImageFromFeedback(feedback)
+  return stripBlock(stripBlock(plain, STUDENT_RESULT_START, STUDENT_RESULT_END), TEACHER_REASON_START, TEACHER_REASON_END)
+}
+
+function extractStudentResultFromFeedback(feedback) {
+  return extractBlock(feedback, STUDENT_RESULT_START, STUDENT_RESULT_END)
+}
+
+function mergeTeacherStudentFeedback(teacherReason, studentResult) {
+  const reason = String(teacherReason || '').trim()
+  const student = String(studentResult || '').trim()
+  const parts = []
+  if (reason) parts.push(`${TEACHER_REASON_START}${reason}${TEACHER_REASON_END}`)
+  if (student) parts.push(`${STUDENT_RESULT_START}${student}${STUDENT_RESULT_END}`)
+  return parts.join('\n')
+}
+
+function mergeFeedbackWithReviewImage(feedback, reviewImageUrl) {
+  const plain = String(feedback || '').trim()
+  if (!reviewImageUrl) return plain
+  return `${plain}${plain ? '\n' : ''}${REVIEW_IMAGE_MARKER}(${reviewImageUrl})`
+}
+
+function dataUrlToFile(dataUrl, fileName) {
+  const parts = String(dataUrl || '').split(',')
+  if (parts.length < 2) return null
+  const mimeMatch = parts[0].match(/:(.*?);/)
+  const mime = mimeMatch?.[1] || 'image/png'
+  const byteString = window.atob(parts[1])
+  const byteNumbers = new Array(byteString.length)
+  for (let i = 0; i < byteString.length; i += 1) {
+    byteNumbers[i] = byteString.charCodeAt(i)
+  }
+  const byteArray = new Uint8Array(byteNumbers)
+  return new File([byteArray], fileName, { type: mime })
+}
+
+async function uploadReviewCanvasImage() {
+  if (!reviewCanvas) return ''
+  const dataUrl = reviewCanvas.toDataURL('image/png')
+  const file = dataUrlToFile(dataUrl, `review-${Date.now()}.png`)
+  if (!file) return ''
+  const res = await uploadHomeworkAttachment(file)
+  return String(res?.fileName || res?.url || '').trim()
+}
+
+async function fetchImageAsFile(imageUrl) {
+  const url = resolveFileUrl(imageUrl)
+  if (!url) return null
+  const token = getToken()
+  const headers = token ? { Authorization: `Bearer ${token}` } : {}
+  const resp = await fetch(url, { headers })
+  if (!resp.ok) throw new Error(`读取作答图片失败: ${resp.status}`)
+  const contentType = String(resp.headers.get('content-type') || '').toLowerCase()
+  if (!contentType.startsWith('image/')) {
+    throw new Error(`读取到的内容不是图片：${contentType || 'unknown'}`)
+  }
+  const blob = await resp.blob()
+  if (!blob || blob.size <= 0) {
+    throw new Error('读取到空图片内容')
+  }
+  const ext = blob.type?.includes('png') ? 'png' : 'jpg'
+  return new File([blob], `student-answer-${Date.now()}.${ext}`, { type: blob.type || 'image/jpeg' })
+}
+
+async function handleAiImageGrade() {
+  const imageUrl = reviewAnswerImageUrl.value
+  if (!imageUrl) {
+    ElMessage.warning('未检测到学生作答图片，无法进行图像AI批改')
+    return
+  }
+  aiImageGrading.value = true
+  try {
+    const studentFile = await fetchImageAsFile(imageUrl)
+    if (!studentFile) {
+      ElMessage.warning('作答图片读取失败')
+      return
+    }
+    const res = await aiGradeSingle({
+      file: studentFile,
+      rubric: reviewForm.exampleFeedback || reviewForm.exampleAnswer || '',
+      maxScore: reviewForm.maxScore || 100
+    })
+    const teacherFeedback = String(res?.teacherFeedback || res?.feedback || '').trim()
+    const studentFeedback = String(res?.studentFeedback || '').trim()
+    reviewForm.feedback = teacherFeedback
+    reviewForm.studentResultText = studentFeedback
+    reviewForm.score = Number(res?.score ?? reviewForm.score)
+    reviewForm.reviewImageUrl = String(res?.annotatedImageUrl || '').trim()
+    if (reviewForm.reviewImageUrl) {
+      reviewImageUrl.value = resolveFileUrl(reviewForm.reviewImageUrl)
+      loadReviewCanvasImage(reviewImageUrl.value)
+    }
+    ElMessage.success('AI图像批改完成，已生成对错标注和错因')
+  } catch (error) {
+    ElMessage.error(error?.message || 'AI图像批改失败')
+  } finally {
+    aiImageGrading.value = false
+  }
 }
 
 async function handleAiSuggestReview() {
@@ -932,10 +1324,12 @@ function openHomeworkReview(row) {
   reviewForm.answerContent = row.answer_content || ''
   reviewForm.score = Number(row.score ?? 0)
   reviewForm.maxScore = 100
-  reviewForm.feedback = row.feedback || ''
+  reviewForm.feedback = extractTeacherReasonFromFeedback(row.feedback || '')
+  reviewForm.studentResultText = extractStudentResultFromFeedback(row.feedback || '')
+  reviewForm.reviewImageUrl = extractReviewImageFromFeedback(row.feedback || '')
   reviewForm.exampleAnswer = row.answer_content || ''
   reviewForm.exampleScore = Number(row.score ?? 85)
-  reviewForm.exampleFeedback = row.feedback || ''
+  reviewForm.exampleFeedback = extractTeacherReasonFromFeedback(row.feedback || '')
   openReviewDialogWithAnswer()
 }
 
@@ -961,14 +1355,33 @@ function buildAnswerContentWithImage(textValue, imageValue) {
 
 async function handleSubmitHomework() {
   const answerContent = buildAnswerContentWithImage(submitForm.answerContent, submitForm.answerImageUrl)
+  console.info('[Pad][Homework] submit-start', {
+    homeworkId: submitForm.homeworkId,
+    answerTextLength: String(submitForm.answerContent || '').length,
+    answerImageUrl: submitForm.answerImageUrl,
+    payloadLength: String(answerContent || '').length
+  })
   if (!answerContent) {
     ElMessage.warning('请填写作答内容或上传作答图片')
     return
   }
-  await submitHomework(submitForm.homeworkId, { answerContent })
-  ElMessage.success('作业提交成功')
-  submitDialog.value = false
-  loadStudentSubmissions()
+  try {
+    const res = await submitHomework(submitForm.homeworkId, { answerContent })
+    console.info('[Pad][Homework] submit-success', {
+      homeworkId: submitForm.homeworkId,
+      response: res
+    })
+    ElMessage.success('作业提交成功')
+    submitDialog.value = false
+    loadStudentSubmissions()
+  } catch (error) {
+    console.error('[Pad][Homework] submit-failed', {
+      homeworkId: submitForm.homeworkId,
+      answerImageUrl: submitForm.answerImageUrl,
+      error
+    })
+    ElMessage.error(error?.message || '作业提交失败，请稍后重试')
+  }
 }
 
 async function handleCreateExam() {
@@ -1000,6 +1413,8 @@ function openExamReview(row) {
   reviewForm.maxScore = Number(row.total_score || 100)
   reviewForm.score = Number(row.score ?? 0)
   reviewForm.feedback = ''
+  reviewForm.studentResultText = ''
+  reviewForm.reviewImageUrl = ''
   reviewForm.exampleAnswer = row.remark || ''
   reviewForm.exampleScore = Number(row.score ?? Math.min(85, reviewForm.maxScore))
   reviewForm.exampleFeedback = ''
@@ -1028,14 +1443,23 @@ async function handleSubmitReview() {
       ElMessage.warning('提交记录不能为空')
       return
     }
+    const hasCanvasDrawMarks = reviewCanvasMarks.value.length > 0
+    const hasLocalCanvasImage = String(reviewImageUrl.value || '').startsWith('data:image/')
+    let uploadedReviewImageUrl = String(reviewForm.reviewImageUrl || '').trim()
+    if ((hasCanvasDrawMarks || hasLocalCanvasImage) && reviewCanvas) {
+      uploadedReviewImageUrl = await uploadReviewCanvasImage()
+    }
+    const roleSeparatedFeedback = mergeTeacherStudentFeedback(reviewForm.feedback, reviewForm.studentResultText)
+    const mergedFeedback = mergeFeedbackWithReviewImage(roleSeparatedFeedback, uploadedReviewImageUrl)
     await scoreHomeworkApi({
       submissionId: reviewForm.submissionId,
       score: reviewForm.score,
-      feedback: reviewForm.feedback
+      feedback: mergedFeedback
     })
     ElMessage.success('作业批改成功')
     reviewDialog.value = false
     await loadTeacherHomeworkSubmissions()
+    await loadChatData()
     return
   }
   if (!reviewForm.examId || !reviewForm.studentId) {
@@ -1067,6 +1491,10 @@ async function loadStudentExamList() {
   studentExams.value = res.data || []
 }
 
+async function refreshStudentExamMerged() {
+  await Promise.all([loadStudentExamList(), loadStudentExamScore(), loadStudentSelfScores()])
+}
+
 function openExamSubmit(row) {
   examSubmitForm.examId = row.examId
   examSubmitForm.examTitle = row.title
@@ -1084,7 +1512,7 @@ async function handleSubmitExam() {
   await submitExam(examSubmitForm.examId, { answerContent })
   ElMessage.success('考试作答已提交')
   examSubmitDialog.value = false
-  await loadStudentExamScore()
+  await refreshStudentExamMerged()
 }
 
 async function loadStudentSelfScores() {
@@ -1307,71 +1735,190 @@ async function handleTeacherTabChange(name) {
   if (name === 'visual') {
     await refreshTeacherVisual()
   }
+  if (name === 'message') {
+    await loadChatData()
+  }
 }
 
 async function handleStudentTabChange(name) {
   if (name === 'exam') {
-    await loadStudentExamList()
-    await loadStudentExamScore()
+    await refreshStudentExamMerged()
   }
   if (name === 'visual') {
     await refreshStudentVisual()
   }
-}
-
-async function loadMessagePosts() {
-  const res = await listForumPosts()
-  messagePosts.value = res.data || []
-}
-
-async function loadMessageNotice() {
-  try {
-    const res = await getForumNotice()
-    messageUnreadTotal.value = res.unreadTotal || 0
-  } catch (error) {
-    messageUnreadTotal.value = 0
+  if (name === 'message') {
+    await loadChatData()
   }
 }
 
-async function markMessageReadState() {
-  try {
-    await markForumRead()
-    await loadMessageNotice()
-  } catch (error) {
-    // ignore
+function applyTabFromQuery() {
+  const studentTab = String(route.query.studentTab || '').trim()
+  if (isStudent.value && ['homework', 'exam', 'visual', 'message'].includes(studentTab)) {
+    studentActiveTab.value = studentTab
+  }
+  const teacherTab = String(route.query.teacherTab || '').trim()
+  if (isTeacher.value && ['publish', 'review', 'score', 'task', 'studentScore', 'visual', 'message'].includes(teacherTab)) {
+    teacherActiveTab.value = teacherTab
   }
 }
 
-async function sendMessageToStudent() {
-  if (!messageForm.title || !messageForm.content) {
-    ElMessage.warning('请填写标题和内容')
+function normalizeUserId(value) {
+  return String(value === null || value === undefined ? '' : value)
+}
+
+function isSelfChatMessage(item) {
+  return Number(item?.sender_id || item?.senderId || 0) === Number(userStore.id || 0)
+}
+
+function scrollChatToBottom() {
+  nextTick(() => {
+    if (!chatBodyRef.value) return
+    chatBodyRef.value.scrollTop = chatBodyRef.value.scrollHeight
+  })
+}
+
+async function loadChatData() {
+  if (!(isTeacher.value || isStudent.value)) {
+    chatContacts.value = []
+    chatGroups.value = []
+    activeChatPeerId.value = ''
+    activeChatGroupId.value = ''
+    chatMessages.value = []
+    chatContactCount.value = 0
+    activeChatTargetType.value = 'dm'
     return
   }
-  await createForumPost({
-    title: messageForm.title,
-    content: messageForm.content,
-    targetRole: 'STUDENT'
-  })
-  messageForm.title = ''
-  messageForm.content = ''
-  ElMessage.success('消息已发送给学生')
-  await loadMessagePosts()
-  await loadMessageNotice()
+  try {
+    chatListLoading.value = true
+    const [contactRes, groupRes] = await Promise.all([listChatContacts(), listChatGroups()])
+    chatContacts.value = contactRes.data || []
+    chatGroups.value = groupRes.data || []
+    chatContactCount.value = chatContacts.value.length
+    const dmExists = chatContacts.value.some(item => normalizeUserId(item.user_id) === activeChatPeerId.value)
+    const gpExists = chatGroups.value.some(item => String(item.groupId || item.group_id) === activeChatGroupId.value)
+    if (!dmExists) {
+      activeChatPeerId.value = chatContacts.value.length ? normalizeUserId(chatContacts.value[0].user_id) : ''
+    }
+    if (!gpExists) {
+      activeChatGroupId.value = chatGroups.value.length ? String(chatGroups.value[0].groupId || chatGroups.value[0].group_id) : ''
+    }
+    if (chatMode.value === 'group' && activeChatGroupId.value) {
+      activeChatTargetType.value = 'group'
+    } else if (activeChatPeerId.value) {
+      activeChatTargetType.value = 'dm'
+    } else if (activeChatGroupId.value) {
+      activeChatTargetType.value = 'group'
+    }
+    await loadChatMessageList()
+  } catch (error) {
+    chatContacts.value = []
+    chatGroups.value = []
+    activeChatPeerId.value = ''
+    activeChatGroupId.value = ''
+    chatMessages.value = []
+    chatContactCount.value = 0
+    ElMessage.error('加载联系人失败')
+  } finally {
+    chatListLoading.value = false
+  }
 }
 
-async function replyMessage(postId) {
-  const value = String(messageReplyMap[postId] || '').trim()
-  if (!value) return
-  await replyForumPostApi(postId, { content: value })
-  messageReplyMap[postId] = ''
-  ElMessage.success('回复成功')
-  await loadMessagePosts()
-  await loadMessageNotice()
+function handleChatModeChange(mode) {
+  if (mode === 'group') {
+    activeChatTargetType.value = 'group'
+    if (!activeChatGroupId.value && chatGroups.value.length) {
+      activeChatGroupId.value = String(chatGroups.value[0].groupId || chatGroups.value[0].group_id)
+    }
+  } else {
+    activeChatTargetType.value = 'dm'
+    if (!activeChatPeerId.value && chatContacts.value.length) {
+      activeChatPeerId.value = normalizeUserId(chatContacts.value[0].user_id)
+    }
+  }
+  loadChatMessageList()
 }
 
-async function refreshMessages() {
-  await loadMessagePosts()
-  await markMessageReadState()
+async function selectChatContact(contact) {
+  const peerId = normalizeUserId(contact?.user_id)
+  if (!peerId) return
+  activeChatPeerId.value = peerId
+  activeChatTargetType.value = 'dm'
+  chatMode.value = 'dm'
+  await loadChatMessageList()
+}
+
+async function selectChatGroup(group) {
+  const groupId = String(group?.groupId || group?.group_id || '')
+  if (!groupId) return
+  activeChatGroupId.value = groupId
+  activeChatTargetType.value = 'group'
+  chatMode.value = 'group'
+  await loadChatMessageList()
+}
+
+async function loadChatMessageList() {
+  if (activeChatTargetType.value === 'group' && !activeChatGroupId.value) {
+    chatMessages.value = []
+    return
+  }
+  if (activeChatTargetType.value !== 'group' && !activeChatPeerId.value) {
+    chatMessages.value = []
+    return
+  }
+  chatListLoading.value = true
+  try {
+    const res = activeChatTargetType.value === 'group'
+      ? await listGroupChatMessages(activeChatGroupId.value)
+      : await listChatMessages(activeChatPeerId.value)
+    chatMessages.value = res.data || []
+    scrollChatToBottom()
+  } catch (error) {
+    chatMessages.value = []
+    ElMessage.error('加载消息失败')
+  } finally {
+    chatListLoading.value = false
+  }
+}
+
+async function sendChat() {
+  const content = String(chatInput.value || '').trim()
+  if (!activeChatTargetLabel.value) {
+    ElMessage.warning('请先选择会话')
+    return
+  }
+  if (!content) {
+    ElMessage.warning('请输入消息内容')
+    return
+  }
+  chatSending.value = true
+  try {
+    if (activeChatTargetType.value === 'group') {
+      await sendGroupChatMessage({
+        groupId: activeChatGroupId.value,
+        content
+      })
+    } else {
+      await sendChatMessage({
+        peerUserId: Number(activeChatPeerId.value),
+        content
+      })
+    }
+    chatInput.value = ''
+    await loadChatMessageList()
+  } catch (error) {
+    ElMessage.error(error?.message || '发送消息失败')
+  } finally {
+    chatSending.value = false
+  }
+}
+
+function openPrivateFromGroup(message) {
+  const senderId = normalizeUserId(message?.sender_id || message?.senderId)
+  if (!senderId || senderId === String(userStore.id || '')) return
+  const target = (chatContacts.value || []).find((item) => normalizeUserId(item.user_id) === senderId)
+  if (!target) return
+  selectChatContact(target)
 }
 
 function openProfileDialog() {
@@ -1396,6 +1943,7 @@ async function handleLogout() {
 }
 
 onMounted(() => {
+  applyTabFromQuery()
   if (isTeacher.value) {
     loadTeacherHomework()
     loadTeacherHomeworkSubmissions()
@@ -1403,18 +1951,13 @@ onMounted(() => {
     loadTeacherExamScores()
     loadTeacherTasks()
     loadTeacherScores()
-    loadMessagePosts()
-    loadMessageNotice()
+    loadChatData()
   }
   if (isStudent.value) {
     loadStudentHomework()
     loadStudentSubmissions()
-    loadStudentExamList()
-    loadStudentExamScore()
-    loadStudentSelfScores()
-    loadMessagePosts()
-    loadMessageNotice()
-    markMessageReadState()
+    refreshStudentExamMerged()
+    loadChatData()
   }
   if (isManager.value) {
     loadManagerScores()
@@ -1464,37 +2007,141 @@ onBeforeUnmount(() => {
   gap: 8px;
   flex-shrink: 0;
 }
-.message-post {
-  border: 1px solid #ebeef5;
-  border-radius: 8px;
-  padding: 10px;
-  margin-bottom: 10px;
-  background: #fff;
-}
-.message-top {
+.chat-header-line {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 6px;
 }
-.message-top span {
-  color: #909399;
+.chat-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 480px;
+}
+.chat-contact-pane {
+  border: 1px solid #d7e7f3;
+  border-radius: 10px;
+  padding: 10px;
+  overflow-y: auto;
+  max-height: 560px;
+  background: #f8fcff;
+}
+.chat-mode-bar {
+  margin-bottom: 8px;
+}
+.chat-search-input {
+  margin-bottom: 8px;
+}
+.chat-contact-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.chat-contact-item:hover {
+  background: #edf7ff;
+}
+.chat-contact-item.active {
+  background: #e3f1ff;
+  border: 1px solid #b8d8f4;
+}
+.chat-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #265d7f;
+  background: linear-gradient(145deg, #e6f4ff 0%, #d7ecff 100%);
+}
+.chat-contact-text strong {
+  display: block;
+  color: #1f3346;
+  font-size: 14px;
+}
+.chat-contact-text span {
+  display: block;
+  margin-top: 2px;
+  color: #6a879d;
   font-size: 12px;
 }
-.reply-actions {
-  margin-top: 4px;
+.chat-main-pane {
+  border: 1px solid #d7e7f3;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  background: #f6fbff;
 }
-.reply-list {
-  margin-top: 6px;
-  padding: 6px 8px;
-  border-left: 2px solid #e5e7eb;
-  background: #f8fafc;
+.chat-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #69859b;
 }
-.reply-item {
-  font-size: 13px;
-  color: #4b5563;
+.chat-message-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  min-height: 300px;
+}
+.chat-main-top {
+  padding: 10px 12px;
+  border-bottom: 1px solid #d7e7f3;
+  color: #35566e;
+  font-weight: 600;
+  background: #f9fcff;
+}
+.chat-message-row {
+  display: flex;
+  margin-bottom: 10px;
+}
+.chat-message-row.self {
+  justify-content: flex-end;
+}
+.chat-bubble {
+  max-width: 72%;
+  background: #fff;
+  border: 1px solid #dbe8f4;
+  border-radius: 12px;
+  padding: 8px 10px;
+}
+.chat-message-row.self .chat-bubble {
+  background: #dff0ff;
+  border-color: #b9d9f5;
+}
+.chat-bubble p {
+  margin: 0;
+  white-space: pre-wrap;
+  color: #243c52;
+  line-height: 1.45;
+}
+.chat-sender-name {
+  display: inline-block;
   margin-bottom: 4px;
+  color: #1884d8;
+  cursor: pointer;
+}
+.chat-bubble span {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #6b879d;
+}
+.chat-editor {
+  border-top: 1px solid #d7e7f3;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 86px;
+  gap: 10px;
+  align-items: end;
+  background: #fff;
+  border-radius: 0 0 10px 10px;
 }
 .visual-grid {
   display: grid;
@@ -1554,6 +2201,12 @@ onBeforeUnmount(() => {
 @media (max-width: 992px) {
   .visual-grid {
     grid-template-columns: 1fr;
+  }
+  .chat-layout {
+    grid-template-columns: 1fr;
+  }
+  .chat-contact-pane {
+    max-height: 220px;
   }
 }
 </style>

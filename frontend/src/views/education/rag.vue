@@ -1,6 +1,26 @@
 <template>
   <div class="rag-shell">
     <aside class="kb-sidebar">
+      <div class="session-header">
+        <div>
+          <h2>历史对话</h2>
+          <p>ChatGPT 风格会话</p>
+        </div>
+        <el-button size="small" type="primary" plain @click="startNewConversation">新增对话</el-button>
+      </div>
+
+      <el-scrollbar class="session-list">
+        <div
+          v-for="item in conversations"
+          :key="item.id"
+          :class="['session-item', { active: item.id === activeConversationId }]"
+          @click="setActiveConversation(item.id)"
+        >
+          <div class="session-title" :title="item.title">{{ item.title }}</div>
+          <div class="session-time">{{ formatTime(item.updatedAt) }}</div>
+        </div>
+      </el-scrollbar>
+
       <div class="kb-header">
         <div>
           <h2>知识库</h2>
@@ -116,7 +136,7 @@
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { uploadExcel, queryQuestion, getDatasets, deleteDataset, getDatasetDetail } from '@/api/education/rag'
+import { uploadExcelFiles, queryQuestion, getDatasets, deleteDataset, getDatasetDetail } from '@/api/education/rag'
 
 const historyDatasets = ref([])
 const loadingHistory = ref(false)
@@ -129,6 +149,11 @@ const messages = ref([])
 const queryLoading = ref(false)
 const chatContainer = ref(null)
 let queryAborted = false
+const conversations = ref([])
+const activeConversationId = ref('')
+
+const CHAT_HISTORY_KEY = 'education_rag_chat_history_v1'
+const MAX_CONVERSATIONS = 30
 
 const selectedFilesText = computed(() => {
   if (!fileList.value.length) return '未选择文件'
@@ -145,7 +170,7 @@ function datasetKey(dataset = {}, index = 0) {
 }
 
 function datasetName(dataset = {}) {
-  return dataset.name || dataset.filename || dataset.dataset_id || '未命名数据集'
+  return dataset.file_name || dataset.filename || dataset.name || dataset.dataset_id || '--'
 }
 
 function datasetTime(dataset = {}) {
@@ -174,34 +199,31 @@ const submitUpload = async () => {
   }
 
   uploadLoading.value = true
-  const successFiles = []
-  const failedFiles = []
-
   try {
-    for (const file of fileList.value) {
-      try {
-        await uploadExcel(file)
-        successFiles.push(file.name)
-      } catch (error) {
-        failedFiles.push(file.name)
-      }
-    }
+    const response = await uploadExcelFiles(fileList.value)
+    const results = response.results || []
+    const successFiles = results.filter((item) => item.status === 'success').map((item) => item.filename)
+    const failedFiles = results.filter((item) => item.status !== 'success').map((item) => item.filename)
 
     if (successFiles.length) {
       ElMessage.success(`上传成功 ${successFiles.length} 个文件`)
-      messages.value.push({
-        type: 'ai',
-        content: `已导入：${successFiles.join('、')}。现在可以基于这些内容提问。`
-      })
+      appendMessage('ai', `已导入：${successFiles.join('、')}。现在可以基于这些内容提问。`)
       await getHistoryDatasets()
     }
 
     if (failedFiles.length) {
       ElMessage.warning(`上传失败：${failedFiles.join('、')}`)
-      messages.value.push({
-        type: 'ai',
-        content: `以下文件上传失败：${failedFiles.join('、')}`
-      })
+      appendMessage('ai', `以下文件上传失败：${failedFiles.join('、')}`)
+      const failedDetails = results
+        .filter((item) => item.status !== 'success')
+        .map((item) => `${item.filename}：${item.message || '处理失败'}`)
+      if (failedDetails.length) {
+        appendMessage('ai', `失败原因：\n${failedDetails.join('\n')}`)
+      }
+    }
+
+    if (!results.length) {
+      ElMessage.warning('未收到上传结果，请检查 AI 服务日志')
     }
   } finally {
     uploadLoading.value = false
@@ -218,7 +240,8 @@ const submitQuery = async () => {
 
   const userQuestion = question.value.trim()
   question.value = ''
-  messages.value.push({ type: 'user', content: userQuestion })
+  appendMessage('user', userQuestion)
+  updateConversationTitleByQuestion(userQuestion)
 
   await nextTick()
   scrollToBottom()
@@ -232,14 +255,24 @@ const submitQuery = async () => {
     if (queryAborted) return
 
     const answer = response.answer || response.data || response.msg || '暂无响应'
-    messages.value.push({ type: 'ai', content: String(answer) })
+    const sources = Array.isArray(response.sources) ? response.sources : []
+    let finalText = String(answer)
+    if (sources.length) {
+      const sourceLines = sources.slice(0, 5).map((src, idx) => {
+        const fileName = src.fileName || '未知文件'
+        const snippet = src.snippet || ''
+        return `${idx + 1}. ${fileName}（score=${src.score ?? '--'}）\n${snippet}`
+      })
+      finalText += `\n\n参考片段：\n${sourceLines.join('\n\n')}`
+    }
+    appendMessage('ai', finalText)
   } catch (error) {
     if (queryAborted) {
-      messages.value.push({ type: 'ai', content: '查询已中止' })
+      appendMessage('ai', '查询已中止')
       return
     }
     ElMessage.error('查询失败，请稍后重试')
-    messages.value.push({ type: 'ai', content: '查询失败，请检查 AI 服务。' })
+    appendMessage('ai', '查询失败，请检查 AI 服务。')
   } finally {
     queryLoading.value = false
     queryAborted = false
@@ -339,7 +372,112 @@ const formatTime = (timeStr) => {
   })
 }
 
+function createConversation(title = '新对话') {
+  const now = new Date().toISOString()
+  return {
+    id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    title,
+    createdAt: now,
+    updatedAt: now,
+    messages: []
+  }
+}
+
+function normalizeConversation(item = {}) {
+  return {
+    id: String(item.id || ''),
+    title: String(item.title || '新对话'),
+    createdAt: String(item.createdAt || new Date().toISOString()),
+    updatedAt: String(item.updatedAt || item.createdAt || new Date().toISOString()),
+    messages: Array.isArray(item.messages) ? item.messages.map((m) => ({ type: m.type, content: String(m.content || '') })) : []
+  }
+}
+
+function saveConversations() {
+  try {
+    const trimmed = conversations.value.slice(0, MAX_CONVERSATIONS)
+    localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(trimmed))
+  } catch (error) {
+    console.warn('保存会话失败', error)
+  }
+}
+
+function loadConversations() {
+  try {
+    const raw = localStorage.getItem(CHAT_HISTORY_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.map((item) => normalizeConversation(item)).filter((item) => item.id)
+  } catch (error) {
+    return []
+  }
+}
+
+function touchActiveConversation() {
+  const id = activeConversationId.value
+  if (!id) return
+  const idx = conversations.value.findIndex((item) => item.id === id)
+  if (idx < 0) return
+  conversations.value[idx].messages = messages.value.map((m) => ({ type: m.type, content: m.content }))
+  conversations.value[idx].updatedAt = new Date().toISOString()
+  const active = conversations.value[idx]
+  conversations.value.splice(idx, 1)
+  conversations.value.unshift(active)
+  activeConversationId.value = active.id
+  saveConversations()
+}
+
+function appendMessage(type, content) {
+  messages.value.push({ type, content })
+  touchActiveConversation()
+}
+
+function setActiveConversation(id) {
+  if (!id) return
+  touchActiveConversation()
+  const target = conversations.value.find((item) => item.id === id)
+  if (!target) return
+  activeConversationId.value = target.id
+  messages.value = (target.messages || []).map((m) => ({ type: m.type, content: m.content }))
+  nextTick(() => {
+    scrollToBottom()
+  })
+}
+
+function startNewConversation() {
+  touchActiveConversation()
+  const newSession = createConversation()
+  conversations.value.unshift(newSession)
+  if (conversations.value.length > MAX_CONVERSATIONS) {
+    conversations.value = conversations.value.slice(0, MAX_CONVERSATIONS)
+  }
+  activeConversationId.value = newSession.id
+  messages.value = []
+  saveConversations()
+}
+
+function updateConversationTitleByQuestion(questionText) {
+  const id = activeConversationId.value
+  if (!id) return
+  const idx = conversations.value.findIndex((item) => item.id === id)
+  if (idx < 0) return
+  const current = conversations.value[idx]
+  if (current.title && current.title !== '新对话') return
+  const nextTitle = String(questionText || '').trim().slice(0, 20) || '新对话'
+  conversations.value[idx].title = nextTitle
+  saveConversations()
+}
+
 onMounted(() => {
+  const history = loadConversations()
+  if (history.length) {
+    conversations.value = history
+    activeConversationId.value = history[0].id
+    messages.value = (history[0].messages || []).map((m) => ({ type: m.type, content: m.content }))
+  } else {
+    startNewConversation()
+  }
   getHistoryDatasets()
 })
 </script>
@@ -363,6 +501,60 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   min-height: calc(100vh - 36px);
+}
+
+.session-header {
+  padding: 14px;
+  border-bottom: 1px solid #eef0f3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.session-header h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.session-header p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.session-list {
+  padding: 8px;
+  max-height: 240px;
+  border-bottom: 1px solid #eef0f3;
+}
+
+.session-item {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+
+.session-item.active {
+  border-color: #10a37f;
+  background: #f0fdf9;
+}
+
+.session-title {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-time {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #6b7280;
 }
 
 .kb-header {

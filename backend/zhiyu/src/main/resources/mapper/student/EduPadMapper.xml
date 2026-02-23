@@ -99,6 +99,7 @@
                s.student_name,
                s.score,
                s.feedback,
+               h.title as homework_title,
                h.teacher_id,
                h.class_name
         from edu_homework_submission s
@@ -302,6 +303,52 @@
             #{postId}
         </foreach>
         order by create_time asc
+    </select>
+
+    <select id="selectClassChatContacts" resultType="java.util.Map">
+        select p.user_id,
+               u.nick_name,
+               p.role_key,
+               p.class_name
+        from edu_user_class_profile p
+                 left join sys_user u on p.user_id = u.user_id
+        where p.class_name = #{className}
+          and p.user_id != #{excludeUserId}
+          and p.role_key = #{roleKey}
+          and (u.del_flag = '0' or u.del_flag is null)
+        order by u.nick_name asc
+    </select>
+
+    <select id="selectChatMessages" resultType="java.util.Map">
+        select post_id as message_id,
+               author_id as sender_id,
+               author_name as sender_name,
+               target_role as receiver_id,
+               content,
+               create_time
+        from edu_forum_post
+        where title = 'CHAT_DM'
+          and class_name = #{className}
+          and (
+            (author_id = #{currentUserId} and target_role = #{peerUserIdStr})
+                or
+            (author_id = #{peerUserId} and target_role = #{currentUserIdStr})
+            )
+        order by create_time asc, post_id asc
+    </select>
+
+    <select id="selectGroupChatMessages" resultType="java.util.Map">
+        select post_id as message_id,
+               author_id as sender_id,
+               author_name as sender_name,
+               target_role as group_id,
+               content,
+               create_time
+        from edu_forum_post
+        where title = 'CHAT_GROUP'
+          and class_name = #{className}
+          and target_role = #{groupId}
+        order by create_time asc, post_id asc
     </select>
 
     <select id="selectForumLastReadTime" parameterType="Long" resultType="java.util.Date">

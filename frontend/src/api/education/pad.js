@@ -16,6 +16,22 @@ export function submitHomework(homeworkId, data) {
   return request({ url: `/education/pad/homework/${homeworkId}/submit`, method: 'post', data })
 }
 
+export function uploadHomeworkAttachment(file) {
+  const formData = new FormData()
+  formData.append('file', file.raw || file)
+  return request({
+    url: '/common/upload',
+    method: 'post',
+    data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data',
+      repeatSubmit: false
+    },
+    timeout: 120000,
+    repeatSubmit: false
+  })
+}
+
 export function listTeacherHomeworkSubmissions() {
   return request({ url: '/education/pad/homework/submissions', method: 'get' })
 }

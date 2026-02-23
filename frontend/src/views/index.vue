@@ -257,15 +257,121 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <el-dialog v-model="noteDialogVisible" title="笔记中心" width="900px">
+      <el-row :gutter="16">
+        <el-col :xs="24" :md="10">
+          <el-card shadow="never" class="note-publish-card">
+            <template #header>发布笔记</template>
+            <el-form :model="noteForm" label-width="68px">
+              <el-form-item label="标题">
+                <el-input v-model="noteForm.title" placeholder="请输入笔记标题" maxlength="60" />
+              </el-form-item>
+              <el-form-item label="内容">
+                <el-input v-model="noteForm.content" type="textarea" :rows="8" placeholder="请输入笔记内容" maxlength="2000" show-word-limit />
+              </el-form-item>
+              <el-form-item>
+                <el-button type="primary" :loading="noteSubmitting" @click="submitNote">发布笔记</el-button>
+                <el-button link type="primary" @click="refreshNotes">刷新</el-button>
+              </el-form-item>
+            </el-form>
+          </el-card>
+        </el-col>
+        <el-col :xs="24" :md="14">
+          <el-card shadow="never" class="note-list-card">
+            <template #header>
+              <div class="card-header">
+                <span>笔记列表</span>
+                <el-radio-group v-model="noteViewMode" size="small">
+                  <el-radio-button label="all">全部笔记</el-radio-button>
+                  <el-radio-button label="mine">我的笔记</el-radio-button>
+                </el-radio-group>
+              </div>
+            </template>
+            <el-empty v-if="filteredNotes.length === 0" description="暂无笔记" />
+            <div v-for="note in filteredNotes" :key="note.post_id" class="note-item">
+              <div class="note-title">{{ parseNoteTitle(note.title) }}</div>
+              <div class="note-meta">{{ note.author_name }} · {{ note.create_time }}</div>
+              <div class="note-content">{{ note.content }}</div>
+              <el-input
+                v-model="noteReplyMap[note.post_id]"
+                placeholder="回复这条笔记"
+                size="small"
+                @keyup.enter="replyNote(note.post_id)"
+              />
+              <div class="note-actions">
+                <el-button link type="primary" size="small" @click="replyNote(note.post_id)">回复</el-button>
+              </div>
+              <div v-if="note.replies && note.replies.length" class="note-reply-list">
+                <div v-for="reply in note.replies" :key="reply.reply_id" class="note-reply-item">
+                  {{ reply.author_name }}：{{ reply.content }}
+                </div>
+              </div>
+            </div>
+          </el-card>
+        </el-col>
+      </el-row>
+    </el-dialog>
+
+    <el-dialog v-model="punchDialogVisible" title="打卡记录" width="560px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <span>今日日期：{{ todayText() }}</span>
+        <el-button type="primary" @click="submitPunch">立即打卡</el-button>
+      </div>
+      <el-table :data="punchRecords" size="small" max-height="320">
+        <el-table-column prop="date" label="日期" width="120" />
+        <el-table-column prop="time" label="时间" width="120" />
+        <el-table-column prop="userName" label="用户" />
+      </el-table>
+    </el-dialog>
+
+    <el-dialog v-model="contactDialogVisible" title="联系我们" width="560px">
+      <el-alert title="支持邮箱：edu-support@example.com；工作日 9:00-18:00" type="info" :closable="false" style="margin-bottom:12px;" />
+      <el-form :model="contactForm" label-width="80px">
+        <el-form-item label="联系人">
+          <el-input v-model="contactForm.name" placeholder="请输入姓名" />
+        </el-form-item>
+        <el-form-item label="电话">
+          <el-input v-model="contactForm.phone" placeholder="请输入联系电话（可选）" />
+        </el-form-item>
+        <el-form-item label="咨询内容">
+          <el-input v-model="contactForm.message" type="textarea" :rows="5" placeholder="请输入咨询内容" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="contactDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="contactSubmitting" @click="submitContact">提交</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="feedbackDialogVisible" title="满意度调查" width="560px">
+      <el-form :model="feedbackForm" label-width="90px">
+        <el-form-item label="满意度">
+          <el-rate v-model="feedbackForm.score" show-score score-template="{value} 分" />
+        </el-form-item>
+        <el-form-item label="反馈内容">
+          <el-input v-model="feedbackForm.content" type="textarea" :rows="6" placeholder="请填写你的建议或意见" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="feedbackDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="feedbackSubmitting" @click="submitFeedback">提交反馈</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup name="Index">
-import { ElMessage } from 'element-plus'
+import { computed, reactive, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
+import useUserStore from '@/store/modules/user'
+import { createForumPost, listForumPosts, replyForumPost } from '@/api/education/forum'
 
 const techStack = ['tensorflow', 'vue3', 'elementplus', 'fastapi', 'langchain', 'LLM', 'RAG', 'nginx', 'docker']
 const router = useRouter()
+const userStore = useUserStore()
+const NOTE_TITLE_PREFIX = '[NOTE]'
 const permissionMatrix = [
   { feature: '查看所有学校成绩', superAdmin: '✅', schoolAdmin: '❌', manager: '❌', teacher: '❌', student: '❌' },
   { feature: '查看本学校所有班级成绩', superAdmin: '✅', schoolAdmin: '✅', manager: '✅（按授权）', teacher: '❌', student: '❌' },
@@ -295,26 +401,246 @@ const otherFunctions = [
   { key: 'logout', name: '退出登录' }
 ]
 
-function goToFunction(key) {
-  if (key === 'orgManage') {
-    router.push('/system/dept')
+const noteDialogVisible = ref(false)
+const noteSubmitting = ref(false)
+const noteViewMode = ref('all')
+const notePosts = ref([])
+const noteForm = reactive({ title: '', content: '' })
+const noteReplyMap = reactive({})
+const punchDialogVisible = ref(false)
+const contactDialogVisible = ref(false)
+const feedbackDialogVisible = ref(false)
+const contactSubmitting = ref(false)
+const feedbackSubmitting = ref(false)
+const contactForm = reactive({
+  name: '',
+  phone: '',
+  message: ''
+})
+const feedbackForm = reactive({
+  score: 5,
+  content: ''
+})
+const punchRecords = ref([])
+const filteredNotes = computed(() => {
+  const mineId = Number(userStore.id || 0)
+  const list = (notePosts.value || []).filter(item => isNotePost(item.title))
+  if (noteViewMode.value === 'mine') {
+    return list.filter(item => Number(item.author_id) === mineId)
+  }
+  return list
+})
+
+function isNotePost(title) {
+  const value = String(title || '')
+  return value.startsWith(NOTE_TITLE_PREFIX) || value.startsWith('NOTE:')
+}
+
+function parseNoteTitle(title) {
+  const value = String(title || '')
+  if (value.startsWith(NOTE_TITLE_PREFIX)) return value.replace(/^\[NOTE\]\s*/, '')
+  if (value.startsWith('NOTE:')) return value.replace(/^NOTE:\s*/, '')
+  return value
+}
+
+function getPunchStorageKey() {
+  const uid = Number(userStore.id || 0)
+  return `edu_punch_records_${uid || 'guest'}`
+}
+
+function loadPunchRecords() {
+  try {
+    const raw = localStorage.getItem(getPunchStorageKey())
+    const list = raw ? JSON.parse(raw) : []
+    punchRecords.value = Array.isArray(list) ? list : []
+  } catch (error) {
+    punchRecords.value = []
+  }
+}
+
+function savePunchRecords() {
+  localStorage.setItem(getPunchStorageKey(), JSON.stringify(punchRecords.value || []))
+}
+
+function todayText() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+async function openPunchDialog() {
+  loadPunchRecords()
+  punchDialogVisible.value = true
+}
+
+async function submitPunch() {
+  const today = todayText()
+  const exists = (punchRecords.value || []).some(item => item.date === today)
+  if (exists) {
+    ElMessage.info('今天已打卡')
     return
   }
-  if (key === 'userManage') {
-    router.push('/system/user')
+  const record = {
+    date: today,
+    time: new Date().toLocaleTimeString(),
+    userName: userStore.name || userStore.nickName || '当前用户'
+  }
+  punchRecords.value = [record, ...(punchRecords.value || [])]
+  savePunchRecords()
+  try {
+    await createForumPost({
+      title: '[PUNCH] 每日打卡',
+      content: `${record.userName} 于 ${record.date} ${record.time} 完成打卡`,
+      targetRole: 'ALL'
+    })
+  } catch (error) {
+    // 打卡主流程不受论坛消息失败影响
+  }
+  ElMessage.success('打卡成功')
+}
+
+async function submitContact() {
+  const name = String(contactForm.name || '').trim()
+  const phone = String(contactForm.phone || '').trim()
+  const message = String(contactForm.message || '').trim()
+  if (!name || !message) {
+    ElMessage.warning('请填写联系人和咨询内容')
     return
   }
-  if (key === 'classManage') {
-    router.push('/system/dept')
+  contactSubmitting.value = true
+  try {
+    await createForumPost({
+      title: '[CONTACT] 联系我们',
+      content: `联系人：${name}\n电话：${phone || '-'}\n内容：${message}`,
+      targetRole: 'ALL'
+    })
+    contactForm.name = ''
+    contactForm.phone = ''
+    contactForm.message = ''
+    contactDialogVisible.value = false
+    ElMessage.success('咨询已提交，我们会尽快联系你')
+  } catch (error) {
+    ElMessage.error('提交失败，请稍后再试')
+  } finally {
+    contactSubmitting.value = false
+  }
+}
+
+async function submitFeedback() {
+  const score = Number(feedbackForm.score || 0)
+  const content = String(feedbackForm.content || '').trim()
+  if (!content) {
+    ElMessage.warning('请填写反馈内容')
     return
   }
-  if (key === 'pad') {
-    router.push('/education/auth?redirect=/education/pad')
+  feedbackSubmitting.value = true
+  try {
+    await createForumPost({
+      title: '[SURVEY] 满意度调查',
+      content: `满意度：${score}/5\n反馈：${content}`,
+      targetRole: 'ALL'
+    })
+    feedbackForm.score = 5
+    feedbackForm.content = ''
+    feedbackDialogVisible.value = false
+    ElMessage.success('感谢反馈，已提交')
+  } catch (error) {
+    ElMessage.error('提交失败，请稍后重试')
+  } finally {
+    feedbackSubmitting.value = false
+  }
+}
+
+async function refreshNotes() {
+  try {
+    const res = await listForumPosts()
+    notePosts.value = res.data || []
+  } catch (error) {
+    notePosts.value = []
+    ElMessage.error('加载笔记失败')
+  }
+}
+
+async function openNoteCenter(mode = 'all') {
+  noteViewMode.value = mode === 'mine' ? 'mine' : 'all'
+  noteDialogVisible.value = true
+  await refreshNotes()
+}
+
+async function submitNote() {
+  const title = String(noteForm.title || '').trim()
+  const content = String(noteForm.content || '').trim()
+  if (!title || !content) {
+    ElMessage.warning('请填写完整的标题和内容')
     return
   }
-  // 这里可以根据实际路由进行跳转
-  ElMessage(`正在跳转到${otherFunctions.find(f => f.key === key)?.name}功能`)
-  // 实际项目中可以使用 router.push 进行跳转
+  noteSubmitting.value = true
+  try {
+    await createForumPost({
+      title: `${NOTE_TITLE_PREFIX} ${title}`,
+      content,
+      targetRole: 'ALL'
+    })
+    noteForm.title = ''
+    noteForm.content = ''
+    ElMessage.success('笔记发布成功')
+    await refreshNotes()
+  } catch (error) {
+    ElMessage.error('笔记发布失败')
+  } finally {
+    noteSubmitting.value = false
+  }
+}
+
+async function replyNote(postId) {
+  const content = String(noteReplyMap[postId] || '').trim()
+  if (!content) return
+  try {
+    await replyForumPost(postId, { content })
+    noteReplyMap[postId] = ''
+    ElMessage.success('回复成功')
+    await refreshNotes()
+  } catch (error) {
+    ElMessage.error('回复失败')
+  }
+}
+
+const functionActionMap = {
+  orgManage: () => router.push('/system/dept'),
+  userManage: () => router.push('/system/user'),
+  classManage: () => router.push('/system/dept'),
+  pad: () => router.push('/education/auth?redirect=/education/pad'),
+  login: () => router.push('/education/auth?redirect=/education/pad&tab=login'),
+  register: () => router.push('/education/auth?redirect=/education/pad&tab=register'),
+  searchNote: () => openNoteCenter('all'),
+  myNote: () => openNoteCenter('mine'),
+  questionRecord: () => router.push('/education/auth?redirect=' + encodeURIComponent('/education/pad?studentTab=homework')),
+  myScore: () => router.push('/education/auth?redirect=' + encodeURIComponent('/education/pad?studentTab=exam')),
+  punch: () => openPunchDialog(),
+  contactUs: () => { contactDialogVisible.value = true },
+  feedback: () => { feedbackDialogVisible.value = true },
+  logout: async () => {
+    try {
+      await ElMessageBox.confirm('确认退出当前账号吗？', '提示', { type: 'warning' })
+    } catch (error) {
+      return
+    }
+    await userStore.logOut()
+    router.push('/login')
+  }
+}
+
+async function goToFunction(key) {
+  const action = functionActionMap[key]
+  if (!action) {
+    ElMessage(`功能开发中：${otherFunctions.find(f => f.key === key)?.name || key}`)
+    return
+  }
+  try {
+    await action()
+  } catch (error) {
+    const msg = String(error || '')
+    if (msg.includes('cancel') || msg.includes('close')) return
+    ElMessage.error('操作失败，请稍后重试')
+  }
 }
 </script>
 
@@ -490,6 +816,55 @@ function goToFunction(key) {
       grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
       gap: 10px;
     }
+  }
+
+  .note-publish-card,
+  .note-list-card {
+    min-height: 560px;
+  }
+
+  .note-item {
+    border: 1px solid #dceaf6;
+    border-radius: 10px;
+    padding: 10px;
+    margin-bottom: 10px;
+    background: #f9fcff;
+  }
+
+  .note-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a;
+  }
+
+  .note-meta {
+    margin-top: 4px;
+    margin-bottom: 8px;
+    font-size: 12px;
+    color: #64748b;
+  }
+
+  .note-content {
+    color: #334155;
+    white-space: pre-wrap;
+    line-height: 1.6;
+    margin-bottom: 8px;
+  }
+
+  .note-actions {
+    margin-top: 4px;
+  }
+
+  .note-reply-list {
+    margin-top: 6px;
+    border-top: 1px dashed #dbe7f4;
+    padding-top: 6px;
+  }
+
+  .note-reply-item {
+    font-size: 13px;
+    color: #3b4f63;
+    margin-bottom: 4px;
   }
 
   @media (max-width: 768px) {

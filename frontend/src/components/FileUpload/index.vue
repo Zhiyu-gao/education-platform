@@ -120,11 +120,20 @@ watch(() => props.modelValue, val => {
 
 // 上传前校检格式和大小
 function handleBeforeUpload(file) {
+  console.info('[FileUpload] before-upload', {
+    action: uploadFileUrl.value,
+    name: file?.name,
+    type: file?.type,
+    size: file?.size,
+    limit: props.limit,
+    fileType: props.fileType
+  })
   // 校检文件类型
   if (props.fileType.length) {
     const fileName = file.name.split('.')
-    const fileExt = fileName[fileName.length - 1]
-    const isTypeOk = props.fileType.indexOf(fileExt) >= 0
+    const fileExt = String(fileName[fileName.length - 1] || '').toLowerCase()
+    const allowedTypes = (props.fileType || []).map(item => String(item || '').toLowerCase())
+    const isTypeOk = allowedTypes.indexOf(fileExt) >= 0
     if (!isTypeOk) {
       proxy.$modal.msgError(`文件格式不正确，请上传${props.fileType.join("/")}格式文件!`)
       return false
@@ -155,14 +164,24 @@ function handleExceed() {
 
 // 上传失败
 function handleUploadError(err) {
+  console.error('[FileUpload] upload-error', {
+    action: uploadFileUrl.value,
+    error: err
+  })
   proxy.$modal.msgError("上传文件失败")
   proxy.$modal.closeLoading()
 }
 
 // 上传成功回调
 function handleUploadSuccess(res, file) {
+  console.info('[FileUpload] upload-success', {
+    action: uploadFileUrl.value,
+    response: res,
+    fileName: file?.name
+  })
   if (res.code === 200) {
-    uploadList.value.push({ name: res.fileName, url: res.fileName })
+    const fileUrl = res.fileName || res.url
+    uploadList.value.push({ name: res.originalFilename || res.fileName || file.name, url: fileUrl })
     uploadedSuccessfully()
   } else {
     number.value--

@@ -187,6 +187,10 @@ watch(
     if (query && query.redirect) {
       redirect.value = String(query.redirect)
     }
+    if (query && query.tab) {
+      const tab = String(query.tab)
+      activeTab.value = tab === 'register' ? 'register' : 'login'
+    }
   },
   { immediate: true }
 )

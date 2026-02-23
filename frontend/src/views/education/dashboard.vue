@@ -15,8 +15,8 @@
           <div class="stat-value">{{ pendingTaskCount }}</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">未读消息</div>
-          <div class="stat-value">{{ forumUnreadTotal }}</div>
+          <div class="stat-label">聊天对象</div>
+          <div class="stat-value">{{ chatContactCount }}</div>
         </div>
       </div>
 
@@ -79,6 +79,19 @@
               </el-form>
             </el-card>
 
+            <el-card v-if="isTeacher" class="block-card" shadow="hover">
+              <template #header>AI批改设置</template>
+              <el-upload :auto-upload="false" :show-file-list="false" :on-change="handleAiReferenceChange" accept=".png,.jpg,.jpeg,.webp">
+                <el-button type="primary" plain size="small">上传批改样卷</el-button>
+              </el-upload>
+              <div class="upload-tip">样卷：{{ aiReferenceFileName || '未上传' }}</div>
+              <el-form label-width="86px">
+                <el-form-item label="满分"><el-input-number v-model="aiMaxScore" :min="1" :max="200" /></el-form-item>
+                <el-form-item label="批改标准"><el-input v-model="aiRubric" type="textarea" :rows="3" placeholder="如：步骤完整、结果正确、单位规范" /></el-form-item>
+              </el-form>
+              <el-button type="success" size="small" :loading="aiReferenceUploading" @click="handleUploadAiReference">保存样卷</el-button>
+            </el-card>
+
             <el-card v-if="isManager" class="block-card" shadow="hover">
               <template #header>管理者下发老师任务</template>
               <el-form :model="teacherTaskForm" label-width="78px">
@@ -121,44 +134,98 @@
 
               <div v-if="isStudent" class="table-zone">
                 <h4>我的作业</h4>
-                <el-table :data="studentHomework" size="small" max-height="200">
+                <el-table :data="studentHomeworkMerged" size="small" max-height="260">
                   <el-table-column prop="homeworkId" label="ID" width="68" />
-                  <el-table-column prop="title" label="标题" />
+                  <el-table-column prop="title" label="标题" min-width="150" />
                   <el-table-column prop="className" label="班级" width="130" />
+                  <el-table-column label="状态" width="96">
+                    <template #default="scope">
+                      <el-tag v-if="scope.row.statusLabel === '被打回'" type="danger" effect="light">被打回</el-tag>
+                      <el-tag v-else-if="scope.row.statusLabel === '已完成'" type="success" effect="light">已完成</el-tag>
+                      <el-tag v-else type="info" effect="light">未完成</el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="分数" width="86">
+                    <template #default="scope">
+                      {{ scope.row.score === null || scope.row.score === undefined ? '--' : scope.row.score }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="feedback" label="反馈" show-overflow-tooltip />
+                  <el-table-column label="附件" width="86">
+                    <template #default="scope">
+                      <el-button link type="primary" @click="previewSubmissionAttachments(scope.row)">查看</el-button>
+                    </template>
+                  </el-table-column>
                   <el-table-column label="操作" width="96">
                     <template #default="scope">
-                      <el-button link type="primary" @click="openSubmit(scope.row)">提交</el-button>
+                      <el-button
+                        v-if="scope.row.statusLabel !== '已完成'"
+                        link
+                        type="primary"
+                        @click="openSubmit(scope.row)"
+                      >
+                        提交
+                      </el-button>
+                      <span v-else>已提交</span>
                     </template>
                   </el-table-column>
                 </el-table>
               </div>
 
               <div v-if="isStudent" class="table-zone">
-                <h4>我的考试</h4>
-                <el-table :data="studentExam" size="small" max-height="200">
+                <h4>我的考试成绩</h4>
+                <el-table :data="studentExamMerged" size="small" max-height="220">
                   <el-table-column prop="examId" label="ID" width="68" />
                   <el-table-column prop="title" label="考试" />
-                  <el-table-column prop="className" label="班级" width="130" />
-                  <el-table-column prop="totalScore" label="总分" width="90" />
-                </el-table>
-              </div>
-
-              <div v-if="isStudent" class="table-zone">
-                <h4>我的作业提交记录</h4>
-                <el-table :data="studentSubmissions" size="small" max-height="200">
-                  <el-table-column prop="homework_title" label="作业" />
-                  <el-table-column prop="score" label="分数" width="86" />
-                  <el-table-column prop="feedback" label="反馈" show-overflow-tooltip />
+                  <el-table-column label="状态" width="96">
+                    <template #default="scope">
+                      <el-tag :type="scope.row.statusLabel === '已完成' ? 'success' : 'info'" effect="light">
+                        {{ scope.row.statusLabel }}
+                      </el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="我的成绩" width="96">
+                    <template #default="scope">
+                      {{ scope.row.myScore === null || scope.row.myScore === undefined ? '--' : scope.row.myScore }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="我的排位" width="96">
+                    <template #default="scope">
+                      {{ scope.row.rankLabel }}
+                    </template>
+                  </el-table-column>
                 </el-table>
               </div>
 
               <div v-if="isTeacher" class="table-zone">
                 <h4>学生作业提交（待批改）</h4>
+                <div class="action-line">
+                  <el-button type="warning" plain size="small" :loading="aiBatchGrading" @click="handleAiBatchGradeHomework">一键AI批改未批改</el-button>
+                </div>
                 <el-table :data="teacherSubmissions" size="small" max-height="220">
                   <el-table-column prop="homework_title" label="作业" />
                   <el-table-column prop="student_name" label="学生" width="120" />
                   <el-table-column prop="answer_content" label="作答" show-overflow-tooltip />
+                  <el-table-column label="附件" width="86">
+                    <template #default="scope">
+                      <el-button link type="primary" @click="previewSubmissionAttachments(scope.row)">查看</el-button>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="批改状态" width="98">
+                    <template #default="scope">
+                      <el-tag :type="scope.row.score === null || scope.row.score === undefined ? 'warning' : 'success'" effect="light">
+                        {{ scope.row.score === null || scope.row.score === undefined ? '待批改' : '已批改' }}
+                      </el-tag>
+                    </template>
+                  </el-table-column>
                   <el-table-column prop="score" label="分数" width="80" />
+                  <el-table-column prop="feedback" label="反馈" show-overflow-tooltip />
+                  <el-table-column label="操作" width="96">
+                    <template #default="scope">
+                      <el-button link type="primary" @click="openHomeworkScore(scope.row)">手动</el-button>
+                      <el-button link type="success" @click="openAiSingleGrade(scope.row)">AI</el-button>
+                    </template>
+                  </el-table-column>
                 </el-table>
               </div>
             </el-card>
@@ -271,50 +338,63 @@
       </section>
 
       <section v-show="activeChannel === 'forum'" class="channel-section">
-        <el-row :gutter="16">
-          <el-col :xl="10" :lg="10" :md="24" :sm="24" :xs="24">
-            <el-card class="block-card" shadow="hover">
-              <template #header>发布论坛消息</template>
-              <el-form :model="forumForm" label-width="72px">
-                <el-form-item label="标题"><el-input v-model="forumForm.title" /></el-form-item>
-                <el-form-item label="内容"><el-input v-model="forumForm.content" type="textarea" :rows="6" /></el-form-item>
-                <el-form-item><el-button type="primary" @click="publishForumPost">发布消息</el-button></el-form-item>
-              </el-form>
-            </el-card>
-          </el-col>
-          <el-col :xl="14" :lg="14" :md="24" :sm="24" :xs="24">
-            <el-card class="block-card" shadow="hover">
-              <template #header>
-                <div class="header-line">
-                  <span>论坛消息列表</span>
-                  <el-button link type="primary" @click="loadForumPosts">刷新</el-button>
-                </div>
-              </template>
-              <el-empty v-if="forumPosts.length === 0" description="暂无消息" />
-              <div v-for="post in forumPosts" :key="post.post_id" class="forum-post">
-                <div class="forum-top">
-                  <strong>{{ post.title }}</strong>
-                  <span>{{ post.author_name }}（{{ post.author_role }}） · {{ post.create_time }}</span>
-                </div>
-                <p>{{ post.content }}</p>
-                <el-input
-                  v-model="forumReplyMap[post.post_id]"
-                  placeholder="回复这条消息"
-                  size="small"
-                  @keyup.enter="replyForumPost(post.post_id)"
-                />
-                <div class="reply-actions">
-                  <el-button size="small" link type="primary" @click="replyForumPost(post.post_id)">回复</el-button>
-                </div>
-                <div v-if="post.replies && post.replies.length" class="reply-list">
-                  <div v-for="reply in post.replies" :key="reply.reply_id" class="reply-item">
-                    {{ reply.author_name }}：{{ reply.content }}
-                  </div>
+        <el-card class="block-card chat-card" shadow="hover">
+          <template #header>
+            <div class="header-line">
+              <span>消息中心</span>
+              <el-button link type="primary" @click="loadChatData">刷新</el-button>
+            </div>
+          </template>
+          <div class="chat-layout">
+            <aside class="chat-contact-pane">
+              <el-empty v-if="chatContacts.length === 0" description="暂无可联系对象" :image-size="64" />
+              <div
+                v-for="contact in chatContacts"
+                :key="contact.user_id"
+                :class="['chat-contact-item', { active: String(contact.user_id) === activeChatPeerId }]"
+                @click="selectChatContact(contact)"
+              >
+                <div class="chat-avatar">{{ String(contact.nick_name || '?').slice(0, 1) }}</div>
+                <div class="chat-contact-text">
+                  <strong>{{ contact.nick_name || `用户${contact.user_id}` }}</strong>
+                  <span>{{ contact.class_name || '' }} · {{ contact.role_key === 'teacher' ? '老师' : '学生' }}</span>
                 </div>
               </div>
-            </el-card>
-          </el-col>
-        </el-row>
+            </aside>
+
+            <section class="chat-main-pane">
+              <div v-if="!activeChatPeerId" class="chat-empty">
+                请选择左侧联系人开始聊天
+              </div>
+              <template v-else>
+                <div ref="chatBodyRef" class="chat-message-list" v-loading="chatListLoading">
+                  <el-empty v-if="chatMessages.length === 0 && !chatListLoading" description="暂无消息，发送第一条吧" :image-size="68" />
+                  <div
+                    v-for="item in chatMessages"
+                    :key="item.message_id"
+                    :class="['chat-message-row', { self: isSelfMessage(item) }]"
+                  >
+                    <div class="chat-bubble">
+                      <p>{{ item.content }}</p>
+                      <span>{{ item.create_time }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="chat-editor">
+                  <el-input
+                    v-model="chatInput"
+                    type="textarea"
+                    :rows="2"
+                    resize="none"
+                    placeholder="输入消息，回车发送"
+                    @keyup.enter.exact.prevent="sendChat"
+                  />
+                  <el-button type="primary" :loading="chatSending" @click="sendChat">发送</el-button>
+                </div>
+              </template>
+            </section>
+          </div>
+        </el-card>
       </section>
 
       <section v-show="activeChannel === 'profile'" class="channel-section">
@@ -362,7 +442,7 @@
         AI助手/预测
       </button>
       <button :class="['nav-btn', { active: activeChannel === 'forum' }]" @click="activeChannel = 'forum'">
-        论坛消息<span v-if="forumUnreadTotal > 0">（{{ forumUnreadTotal }}）</span>
+        消息中心<span v-if="chatContactCount > 0">（{{ chatContactCount }}）</span>
       </button>
       <button :class="['nav-btn', { active: activeChannel === 'profile' }]" @click="activeChannel = 'profile'">
         个人信息
@@ -373,27 +453,78 @@
       <el-form :model="submitForm" label-width="78px">
         <el-form-item label="作业ID"><el-input v-model="submitForm.homeworkId" disabled /></el-form-item>
         <el-form-item label="作答内容"><el-input v-model="submitForm.answerContent" type="textarea" :rows="6" /></el-form-item>
+        <el-form-item label="图片附件">
+          <el-upload
+            :auto-upload="false"
+            list-type="picture-card"
+            accept=".png,.jpg,.jpeg,.webp"
+            multiple
+            :limit="6"
+            :on-change="handleHomeworkImageChange"
+            :on-remove="handleHomeworkImageRemove"
+            :on-exceed="handleHomeworkImageExceed"
+          >
+            <el-icon><Plus /></el-icon>
+          </el-upload>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="submitDialog = false">取消</el-button>
         <el-button type="primary" @click="handleSubmitHomework">提交</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="homeworkScoreDialog" title="作业批改" width="520px">
+      <el-form :model="homeworkScoreForm" label-width="86px">
+        <el-form-item label="提交ID"><el-input v-model="homeworkScoreForm.submissionId" disabled /></el-form-item>
+        <el-form-item label="学生"><el-input v-model="homeworkScoreForm.studentName" disabled /></el-form-item>
+        <el-form-item label="分数"><el-input-number v-model="homeworkScoreForm.score" :min="0" :max="100" /></el-form-item>
+        <el-form-item label="反馈"><el-input v-model="homeworkScoreForm.feedback" type="textarea" :rows="4" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="homeworkScoreDialog = false">取消</el-button>
+        <el-button type="primary" @click="handleScoreHomework">提交批改</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="aiSingleDialog" title="AI批改单份试卷" width="560px">
+      <el-form label-width="94px">
+        <el-form-item label="提交ID">
+          <el-input :model-value="(aiSingleTarget && (aiSingleTarget.submission_id || aiSingleTarget.submissionId)) || ''" disabled />
+        </el-form-item>
+        <el-form-item label="学生">
+          <el-input :model-value="(aiSingleTarget && (aiSingleTarget.student_name || aiSingleTarget.studentName)) || ''" disabled />
+        </el-form-item>
+        <el-form-item label="学生试卷">
+          <el-upload :auto-upload="false" :show-file-list="false" :on-change="handleAiSingleStudentFileChange" accept=".png,.jpg,.jpeg,.webp">
+            <el-button type="primary" plain size="small">上传学生试卷图</el-button>
+          </el-upload>
+          <span class="selected-files">{{ aiSingleStudentFileName || '未选择（将退化为文本AI批改）' }}</span>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="aiSingleDialog = false">取消</el-button>
+        <el-button type="success" :loading="aiSingleGrading" @click="handleAiSingleGrade">AI批改并写入</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Plus } from '@element-plus/icons-vue'
 import useUserStore from '@/store/modules/user'
 import {
   createHomework,
   listTeacherHomework,
   listStudentHomework,
   submitHomework,
+  uploadHomeworkAttachment,
   listTeacherHomeworkSubmissions,
   listStudentHomeworkSubmissions,
+  scoreHomework,
   createExam,
   listTeacherExam,
   listStudentExam,
@@ -403,12 +534,14 @@ import {
   listStudentSelfScores,
   createTeacherTask,
   listTeacherTasks,
-  listTeacherScores
+  listTeacherScores,
+  aiSuggestReview
 } from '@/api/education/pad'
 import { uploadExcel, queryQuestion, getDatasets } from '@/api/education/rag'
+import { uploadAiReference, aiGradeSingle } from '@/api/education/aiGrading'
 import { trainPredictionModel, getModelInfo, predictScore } from '@/api/education/prediction'
 import { getUserProfile, updateUserProfile, updateUserPwd } from '@/api/system/user'
-import { listForumPosts, createForumPost, replyForumPost as replyForumPostApi, getForumNotice, markForumRead } from '@/api/education/forum'
+import { listChatContacts, listChatMessages, sendChatMessage } from '@/api/education/forum'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -447,6 +580,21 @@ const managerScores = ref({ examScores: [], performanceScores: [] })
 
 const submitDialog = ref(false)
 const submitForm = reactive({ homeworkId: '', answerContent: '' })
+const submitImageFiles = ref([])
+const homeworkScoreDialog = ref(false)
+const homeworkScoreForm = reactive({ submissionId: '', studentName: '', score: 0, feedback: '' })
+const aiReferenceFile = ref(null)
+const aiReferenceFileName = ref('')
+const aiReferenceId = ref('')
+const aiRubric = ref('')
+const aiMaxScore = ref(100)
+const aiReferenceUploading = ref(false)
+const aiSingleDialog = ref(false)
+const aiSingleTarget = ref(null)
+const aiSingleStudentFile = ref(null)
+const aiSingleStudentFileName = ref('')
+const aiSingleGrading = ref(false)
+const aiBatchGrading = ref(false)
 
 const visualStats = reactive({
   homeworkCompletion: 0,
@@ -497,12 +645,17 @@ const predictForm = reactive({
   }
 })
 
-const forumForm = reactive({ title: '', content: '' })
-const forumPosts = ref([])
-const forumReplyMap = reactive({})
-const forumUnreadTotal = ref(0)
+const chatContacts = ref([])
+const activeChatPeerId = ref('')
+const chatMessages = ref([])
+const chatInput = ref('')
+const chatListLoading = ref(false)
+const chatSending = ref(false)
+const chatBodyRef = ref(null)
+const chatContactCount = ref(0)
 const currentTime = ref('')
 let timeTimer = null
+let chatPollTimer = null
 
 const profileForm = reactive({ userName: '', nickName: '', phonenumber: '', email: '' })
 const pwdForm = reactive({ oldPassword: '', newPassword: '' })
@@ -558,6 +711,69 @@ const quickWidgets = computed(() => {
   return cards.slice(0, 8)
 })
 
+const studentHomeworkMerged = computed(() => {
+  const submissionMap = new Map()
+  ;(studentSubmissions.value || []).forEach((item) => {
+    const key = item.homeworkId || item.homework_id
+    if (!key) return
+    if (!submissionMap.has(key)) {
+      submissionMap.set(key, item)
+    }
+  })
+
+  return (studentHomework.value || []).map((hw) => {
+    const key = hw.homeworkId || hw.homework_id
+    const submission = submissionMap.get(key)
+    const feedback = submission?.feedback || ''
+    const isRejected = /打回|退回|重做/.test(String(feedback))
+    let statusLabel = '未完成'
+    if (submission) {
+      statusLabel = isRejected ? '被打回' : '已完成'
+    }
+    return {
+      ...hw,
+      answer_content: submission?.answer_content || submission?.answerContent || '',
+      score: submission?.score,
+      feedback,
+      statusLabel
+    }
+  })
+})
+
+const studentExamMerged = computed(() => {
+  const scoreMap = new Map()
+  ;(studentExamScores.value || []).forEach((row) => {
+    const key = row.examId || row.exam_id
+    if (!key) return
+    scoreMap.set(key, row)
+  })
+
+  const selfData = studentSelfScores.value?.data || studentSelfScores.value || {}
+  const perfRows = selfData.performanceScores || []
+  const sortedPerf = [...perfRows].sort((a, b) => toNum(b.exam_score) - toNum(a.exam_score))
+  const myId = toNum(userStore.id)
+  let myRank = -1
+  sortedPerf.forEach((item, idx) => {
+    const sid = toNum(item.student_id || item.studentId)
+    if (sid === myId && myRank === -1) {
+      myRank = idx + 1
+    }
+  })
+  const rankLabel = myRank > 0 ? `${myRank}/${sortedPerf.length || myRank}` : '--'
+
+  return (studentExam.value || []).map((exam) => {
+    const key = exam.examId || exam.exam_id
+    const scoreRow = scoreMap.get(key)
+    const myScore = scoreRow?.score
+    return {
+      ...exam,
+      myScore,
+      rankLabel,
+      statusLabel: myScore === null || myScore === undefined ? '未完成' : '已完成'
+    }
+  })
+})
+
 watch(activeChannel, async (val) => {
   if (val === 'publish') await loadPublishData()
   if (val === 'visual') await loadVisualData()
@@ -566,8 +782,7 @@ watch(activeChannel, async (val) => {
     await fetchModelInfo()
   }
   if (val === 'forum') {
-    await loadForumPosts()
-    await markForumReadState()
+    await loadChatData()
   }
   if (val === 'profile') await loadProfile()
 })
@@ -575,6 +790,21 @@ watch(activeChannel, async (val) => {
 function toNum(value) {
   const n = Number(value)
   return Number.isFinite(n) ? n : 0
+}
+
+function extractUrls(text) {
+  const raw = String(text || '')
+  const matches = raw.match(/https?:\/\/[^\s]+/g) || []
+  return Array.from(new Set(matches))
+}
+
+function previewSubmissionAttachments(row) {
+  const urls = extractUrls(row?.answer_content || row?.answerContent)
+  if (!urls.length) {
+    ElMessage.info('该提交暂无图片附件')
+    return
+  }
+  urls.forEach((url) => window.open(url, '_blank'))
 }
 
 function refreshTime() {
@@ -627,18 +857,210 @@ async function handleCreateTeacherTask() {
 function openSubmit(row) {
   submitForm.homeworkId = row.homeworkId
   submitForm.answerContent = ''
+  submitImageFiles.value = []
   submitDialog.value = true
 }
 
 async function handleSubmitHomework() {
-  if (!submitForm.answerContent) {
-    ElMessage.warning('请填写作答内容')
+  if (!submitForm.answerContent && submitImageFiles.value.length === 0) {
+    ElMessage.warning('请填写作答内容或上传图片')
     return
   }
-  await submitHomework(submitForm.homeworkId, { answerContent: submitForm.answerContent })
+  const uploadedUrls = []
+  try {
+    for (const file of submitImageFiles.value) {
+      const uploadRes = await uploadHomeworkAttachment(file)
+      if (uploadRes?.url) {
+        uploadedUrls.push(uploadRes.url)
+      }
+    }
+  } catch (error) {
+    ElMessage.error(error?.message || '图片上传失败，请重试')
+    return
+  }
+
+  let answerContent = submitForm.answerContent || ''
+  if (uploadedUrls.length > 0) {
+    const attachments = uploadedUrls.join('\n')
+    answerContent = answerContent
+      ? `${answerContent}\n\n【图片附件】\n${attachments}`
+      : `【图片附件】\n${attachments}`
+  }
+
+  await submitHomework(submitForm.homeworkId, { answerContent })
   ElMessage.success('提交成功')
   submitDialog.value = false
+  submitImageFiles.value = []
   await loadPublishData()
+}
+
+function handleHomeworkImageChange(file, fileList) {
+  const maxSize = 10 * 1024 * 1024
+  const valid = []
+  ;(fileList || []).forEach((item) => {
+    const f = item.raw || item
+    if (!f) return
+    if (f.size > maxSize) {
+      ElMessage.warning(`图片 ${item.name || f.name || ''} 超过10MB，已忽略`)
+      return
+    }
+    valid.push(f)
+  })
+  submitImageFiles.value = valid
+}
+
+function handleHomeworkImageRemove(file, fileList) {
+  submitImageFiles.value = (fileList || []).map(item => item.raw || item).filter(Boolean)
+}
+
+function handleHomeworkImageExceed() {
+  ElMessage.warning('最多上传6张图片')
+}
+
+function openHomeworkScore(row) {
+  homeworkScoreForm.submissionId = row.submissionId || row.submission_id || ''
+  homeworkScoreForm.studentName = row.studentName || row.student_name || ''
+  homeworkScoreForm.score = row.score === null || row.score === undefined ? 0 : toNum(row.score)
+  homeworkScoreForm.feedback = row.feedback || ''
+  homeworkScoreDialog.value = true
+}
+
+async function handleScoreHomework() {
+  if (!homeworkScoreForm.submissionId) {
+    ElMessage.warning('缺少提交记录ID')
+    return
+  }
+  await scoreHomework({
+    submissionId: homeworkScoreForm.submissionId,
+    score: homeworkScoreForm.score,
+    feedback: homeworkScoreForm.feedback
+  })
+  ElMessage.success('作业批改已保存')
+  homeworkScoreDialog.value = false
+  Object.assign(homeworkScoreForm, { submissionId: '', studentName: '', score: 0, feedback: '' })
+  await loadPublishData()
+}
+
+function handleAiReferenceChange(file) {
+  aiReferenceFile.value = file
+  aiReferenceFileName.value = file?.name || ''
+}
+
+async function handleUploadAiReference() {
+  if (!aiReferenceFile.value) {
+    ElMessage.warning('请先上传批改样卷图片')
+    return
+  }
+  aiReferenceUploading.value = true
+  try {
+    const res = await uploadAiReference(aiReferenceFile.value)
+    aiReferenceId.value = res.referenceId || ''
+    ElMessage.success('AI样卷已保存')
+  } catch (error) {
+    ElMessage.error('样卷上传失败')
+  } finally {
+    aiReferenceUploading.value = false
+  }
+}
+
+function openAiSingleGrade(row) {
+  aiSingleTarget.value = row
+  aiSingleStudentFile.value = null
+  aiSingleStudentFileName.value = ''
+  aiSingleDialog.value = true
+}
+
+function handleAiSingleStudentFileChange(file) {
+  aiSingleStudentFile.value = file
+  aiSingleStudentFileName.value = file?.name || ''
+}
+
+async function handleAiSingleGrade() {
+  const row = aiSingleTarget.value
+  if (!row) {
+    ElMessage.warning('缺少待批改记录')
+    return
+  }
+  const submissionId = row.submissionId || row.submission_id
+  if (!submissionId) {
+    ElMessage.warning('缺少提交ID')
+    return
+  }
+
+  aiSingleGrading.value = true
+  try {
+    let score = 0
+    let feedback = ''
+    let annotatedImage = ''
+    if (aiSingleStudentFile.value) {
+      const res = await aiGradeSingle({
+        file: aiSingleStudentFile.value,
+        referenceId: aiReferenceId.value,
+        rubric: aiRubric.value,
+        maxScore: aiMaxScore.value
+      })
+      score = toNum(res.score)
+      feedback = String(res.feedback || '')
+      annotatedImage = res.annotatedImageUrl || ''
+    } else {
+      const suggest = await aiSuggestReview({
+        targetAnswer: row.answer_content || '',
+        exampleAnswer: aiRubric.value || '',
+        exampleFeedback: '按标准完成度给分，指出主要失分点',
+        exampleScore: Math.min(90, aiMaxScore.value),
+        maxScore: aiMaxScore.value
+      })
+      score = toNum(suggest.suggestedScore)
+      feedback = String(suggest.suggestedFeedback || '')
+    }
+
+    const feedbackWithImage = annotatedImage
+      ? `${feedback}\n[标注图](${annotatedImage})`
+      : feedback
+    await scoreHomework({
+      submissionId,
+      score: Math.max(0, Math.min(100, Math.round(score))),
+      feedback: feedbackWithImage
+    })
+    ElMessage.success('AI批改完成并已写入')
+    aiSingleDialog.value = false
+    await loadPublishData()
+  } catch (error) {
+    ElMessage.error('AI批改失败')
+  } finally {
+    aiSingleGrading.value = false
+  }
+}
+
+async function handleAiBatchGradeHomework() {
+  const ungraded = (teacherSubmissions.value || []).filter(item => item.score === null || item.score === undefined)
+  if (!ungraded.length) {
+    ElMessage.info('当前没有待批改作业')
+    return
+  }
+  aiBatchGrading.value = true
+  try {
+    for (const row of ungraded) {
+      const suggest = await aiSuggestReview({
+        targetAnswer: row.answer_content || '',
+        exampleAnswer: aiRubric.value || '',
+        exampleFeedback: '按标准完成度给分，指出主要失分点',
+        exampleScore: Math.min(90, aiMaxScore.value),
+        maxScore: aiMaxScore.value
+      })
+      await scoreHomework({
+        submissionId: row.submissionId || row.submission_id,
+        score: Math.max(0, Math.min(100, Math.round(toNum(suggest.suggestedScore)))),
+        feedback: `[AI一键批改] ${String(suggest.suggestedFeedback || '')}`
+      })
+    }
+    ElMessage.success(`AI已完成 ${ungraded.length} 份作业批改`)
+    await loadPublishData()
+  } catch (error) {
+    ElMessage.error('一键AI批改失败')
+  } finally {
+    aiBatchGrading.value = false
+  }
 }
 
 async function loadPublishData() {
@@ -843,60 +1265,98 @@ async function handlePredictScore() {
   }
 }
 
-async function loadForumPosts() {
-  try {
-    const res = await listForumPosts()
-    forumPosts.value = res.data || []
-  } catch (error) {
-    forumPosts.value = []
-    ElMessage.error('加载论坛消息失败')
-  }
+function normalizeUserId(value) {
+  return String(value === null || value === undefined ? '' : value)
 }
 
-async function loadForumNotice() {
-  try {
-    const res = await getForumNotice()
-    forumUnreadTotal.value = res.unreadTotal || 0
-  } catch (error) {
-    forumUnreadTotal.value = 0
-  }
+function isSelfMessage(item) {
+  return toNum(item.sender_id || item.senderId) === toNum(userStore.id)
 }
 
-async function markForumReadState() {
-  try {
-    await markForumRead()
-    await loadForumNotice()
-  } catch (error) {
-    // ignore
-  }
+function scrollChatToBottom() {
+  nextTick(() => {
+    if (!chatBodyRef.value) return
+    chatBodyRef.value.scrollTop = chatBodyRef.value.scrollHeight
+  })
 }
 
-async function publishForumPost() {
-  if (!forumForm.title || !forumForm.content) {
-    ElMessage.warning('请填写标题和内容')
+async function loadChatData() {
+  if (!(isTeacher.value || isStudent.value)) {
+    chatContacts.value = []
+    activeChatPeerId.value = ''
+    chatMessages.value = []
+    chatContactCount.value = 0
     return
   }
-  const targetRole = isManager.value ? 'ALL' : (isTeacher.value ? 'STUDENT' : 'ALL')
-  await createForumPost({
-    title: forumForm.title,
-    content: forumForm.content,
-    targetRole
-  })
-  forumForm.title = ''
-  forumForm.content = ''
-  ElMessage.success('发布成功')
-  await loadForumPosts()
-  await loadForumNotice()
+  try {
+    chatListLoading.value = true
+    const res = await listChatContacts()
+    chatContacts.value = res.data || []
+    chatContactCount.value = chatContacts.value.length
+    const exists = chatContacts.value.some(item => normalizeUserId(item.user_id) === activeChatPeerId.value)
+    if (!exists) {
+      activeChatPeerId.value = chatContacts.value.length ? normalizeUserId(chatContacts.value[0].user_id) : ''
+    }
+    await loadChatMessageList()
+  } catch (error) {
+    chatContacts.value = []
+    activeChatPeerId.value = ''
+    chatMessages.value = []
+    chatContactCount.value = 0
+    ElMessage.error('加载联系人失败')
+  } finally {
+    chatListLoading.value = false
+  }
 }
 
-async function replyForumPost(postId) {
-  const value = String(forumReplyMap[postId] || '').trim()
-  if (!value) return
-  await replyForumPostApi(postId, { content: value })
-  forumReplyMap[postId] = ''
-  ElMessage.success('回复成功')
-  await loadForumPosts()
-  await loadForumNotice()
+async function selectChatContact(contact) {
+  const peerId = normalizeUserId(contact && contact.user_id)
+  if (!peerId || peerId === activeChatPeerId.value) return
+  activeChatPeerId.value = peerId
+  await loadChatMessageList()
+}
+
+async function loadChatMessageList() {
+  if (!activeChatPeerId.value) {
+    chatMessages.value = []
+    return
+  }
+  chatListLoading.value = true
+  try {
+    const res = await listChatMessages(activeChatPeerId.value)
+    chatMessages.value = res.data || []
+    scrollChatToBottom()
+  } catch (error) {
+    chatMessages.value = []
+    ElMessage.error('加载消息失败')
+  } finally {
+    chatListLoading.value = false
+  }
+}
+
+async function sendChat() {
+  const content = String(chatInput.value || '').trim()
+  if (!activeChatPeerId.value) {
+    ElMessage.warning('请先选择联系人')
+    return
+  }
+  if (!content) {
+    ElMessage.warning('请输入消息内容')
+    return
+  }
+  chatSending.value = true
+  try {
+    await sendChatMessage({
+      peerUserId: toNum(activeChatPeerId.value),
+      content
+    })
+    chatInput.value = ''
+    await loadChatMessageList()
+  } catch (error) {
+    ElMessage.error(error?.message || '发送消息失败')
+  } finally {
+    chatSending.value = false
+  }
 }
 
 async function loadProfile() {
@@ -940,8 +1400,12 @@ async function handleLogout() {
 onMounted(async () => {
   refreshTime()
   timeTimer = setInterval(refreshTime, 1000)
-  await loadForumPosts()
-  await loadForumNotice()
+  chatPollTimer = setInterval(async () => {
+    if (activeChannel.value === 'forum' && activeChatPeerId.value) {
+      await loadChatMessageList()
+    }
+  }, 5000)
+  await loadChatData()
   await loadPublishData()
   await loadVisualData()
   await loadProfile()
@@ -951,6 +1415,10 @@ onBeforeUnmount(() => {
   if (timeTimer) {
     clearInterval(timeTimer)
     timeTimer = null
+  }
+  if (chatPollTimer) {
+    clearInterval(chatPollTimer)
+    chatPollTimer = null
   }
 })
 </script>
@@ -1118,40 +1586,139 @@ onBeforeUnmount(() => {
   white-space: pre-wrap;
 }
 
-.forum-post {
-  border: 1px solid #dbe7f3;
-  border-radius: 10px;
+.chat-card {
+  margin-bottom: 0;
+}
+
+.chat-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 14px;
+  min-height: 520px;
+}
+
+.chat-contact-pane {
+  border: 1px solid #d7e7f3;
+  border-radius: 12px;
   padding: 10px;
-  margin-bottom: 10px;
+  overflow-y: auto;
+  max-height: 620px;
   background: #f9fcff;
 }
 
-.forum-top {
+.chat-contact-item {
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 6px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-.forum-top span {
-  color: #6b8599;
+.chat-contact-item:hover {
+  background: #eff7ff;
+}
+
+.chat-contact-item.active {
+  background: #e5f3ff;
+  border: 1px solid #add1ef;
+}
+
+.chat-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: #255877;
+  background: linear-gradient(145deg, #e4f2ff 0%, #d3ebff 100%);
+}
+
+.chat-contact-text strong {
+  display: block;
+  color: #17324d;
+  font-size: 14px;
+}
+
+.chat-contact-text span {
+  display: block;
+  margin-top: 2px;
+  color: #62839a;
   font-size: 12px;
 }
 
-.reply-actions {
-  margin: 4px 0;
+.chat-main-pane {
+  border: 1px solid #d7e7f3;
+  border-radius: 12px;
+  background: #f6fbff;
+  display: flex;
+  flex-direction: column;
+  min-height: 520px;
 }
 
-.reply-list {
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px dashed #d7e5f1;
+.chat-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #648399;
 }
 
-.reply-item {
-  color: #3b5f79;
-  font-size: 13px;
-  margin-bottom: 4px;
+.chat-message-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+}
+
+.chat-message-row {
+  display: flex;
+  margin-bottom: 10px;
+}
+
+.chat-message-row.self {
+  justify-content: flex-end;
+}
+
+.chat-bubble {
+  max-width: 72%;
+  background: #ffffff;
+  border: 1px solid #dbe8f4;
+  border-radius: 12px;
+  padding: 8px 10px;
+}
+
+.chat-message-row.self .chat-bubble {
+  background: #dff0ff;
+  border-color: #b7d9f5;
+}
+
+.chat-bubble p {
+  margin: 0;
+  white-space: pre-wrap;
+  color: #1c3d56;
+  line-height: 1.45;
+}
+
+.chat-bubble span {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #6d8aa0;
+}
+
+.chat-editor {
+  border-top: 1px solid #d7e7f3;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 86px;
+  gap: 10px;
+  align-items: end;
+  background: #ffffff;
+  border-radius: 0 0 12px 12px;
 }
 
 .predict-form :deep(.el-form-item) {
@@ -1197,6 +1764,19 @@ onBeforeUnmount(() => {
 
   .widget-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .chat-layout {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+
+  .chat-contact-pane {
+    max-height: 220px;
+  }
+
+  .chat-main-pane {
+    min-height: 420px;
   }
 }
 

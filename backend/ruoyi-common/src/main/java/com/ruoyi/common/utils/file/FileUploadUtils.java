@@ -2,6 +2,8 @@ package com.ruoyi.common.utils.file;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Objects;
 import org.apache.commons.io.FilenameUtils;
@@ -157,13 +159,20 @@ public class FileUploadUtils
     public static final File getAbsoluteFile(String uploadDir, String fileName) throws IOException
     {
         File desc = new File(uploadDir + File.separator + fileName);
-
-        if (!desc.exists())
+        File parentFile = desc.getParentFile();
+        if (parentFile == null)
         {
-            if (!desc.getParentFile().exists())
-            {
-                desc.getParentFile().mkdirs();
-            }
+            throw new IOException("上传目录无效: " + uploadDir);
+        }
+        Path parentPath = parentFile.toPath();
+        // 确保父目录存在且可写，避免 transferTo 抛 NoSuchFileException。
+        if (Files.notExists(parentPath))
+        {
+            Files.createDirectories(parentPath);
+        }
+        if (!Files.isWritable(parentPath))
+        {
+            throw new IOException("上传目录不可写: " + parentPath);
         }
         return desc;
     }

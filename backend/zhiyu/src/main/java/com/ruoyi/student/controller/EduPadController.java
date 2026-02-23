@@ -2,12 +2,15 @@ package com.ruoyi.student.controller;
 
 import java.util.Date;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -50,6 +53,29 @@ import com.ruoyi.system.service.ISysUserService;
 @RestController
 @RequestMapping("/education/pad")
 public class EduPadController extends BaseController {
+    private static final Logger log = LoggerFactory.getLogger(EduPadController.class);
+    private static final int MIN_GRADE_NO = 1;
+    private static final int MAX_GRADE_NO = 5;
+    private static final int MIN_CLASS_NO = 1;
+    private static final int MAX_CLASS_NO = 10;
+    private static final int HOMEWORK_MIN_SCORE = 0;
+    private static final int HOMEWORK_MAX_SCORE = 100;
+    private static final int DEFAULT_EXAM_MAX_SCORE = 100;
+    private static final int DEFAULT_EXAMPLE_SCORE = 80;
+    private static final int MIN_AI_FALLBACK_SCORE = 60;
+    private static final String STATUS_PUBLISHED = "PUBLISHED";
+    private static final String STATUS_TODO = "TODO";
+    private static final String CHAT_DM_TITLE = "CHAT_DM";
+    private static final String CHAT_GROUP_TITLE = "CHAT_GROUP";
+    private static final String DEFAULT_CLASS_GROUP_ID = "CLASS_ALL";
+    private static final String ROLE_KEY_TEACHER = "teacher";
+    private static final String ROLE_KEY_STUDENT = "student";
+    private static final String ROLE_KEY_DEFAULT_STUDENT = "role_default";
+    private static final String CLASS_NAME_KEY = "class_name";
+    private static final String GRADE_NO_KEY = "grade_no";
+    private static final String CLASS_NO_KEY = "class_no";
+    private static final String ROLE_KEY_KEY = "role_key";
+    private static final String POST_ID_KEY = "post_id";
     private static final String ROLE_MANAGER = "MANAGER";
     private static final String ROLE_TEACHER = "TEACHER";
     private static final String ROLE_STUDENT = "STUDENT";
@@ -126,7 +152,7 @@ public class EduPadController extends BaseController {
             homework.setClassName(className);
         }
         if (homework.getStatus() == null) {
-            homework.setStatus("PUBLISHED");
+            homework.setStatus(STATUS_PUBLISHED);
         }
         return toAjax(eduPadMapper.insertHomework(homework));
     }
@@ -142,7 +168,7 @@ public class EduPadController extends BaseController {
     public AjaxResult listStudentHomework() {
         String className = getCurrentClassName();
         if (StringUtils.isEmpty(className)) {
-            return success(new ArrayList<>());
+            return emptyListSuccess();
         }
         return success(eduPadMapper.selectHomeworkByClassName(className));
     }
@@ -151,15 +177,28 @@ public class EduPadController extends BaseController {
     @PostMapping("/homework/{homeworkId}/submit")
     public AjaxResult submitHomework(@PathVariable Long homeworkId, @RequestBody EduHomeworkSubmission submission) {
         Long studentId = SecurityUtils.getUserId();
+        if (submission == null) {
+            log.warn("学生提交作业参数为空: homeworkId={}, studentId={}", homeworkId, studentId);
+            return error("提交参数不能为空");
+        }
+        String answerContent = submission.getAnswerContent();
+        log.info("学生提交作业请求: homeworkId={}, studentId={}, answerLength={}, hasImageMarker={}",
+                homeworkId,
+                studentId,
+                answerContent == null ? 0 : answerContent.length(),
+                answerContent != null && answerContent.contains("![作答图片]("));
         Long exists = eduPadMapper.selectHomeworkSubmissionExists(homeworkId, studentId);
         if (exists != null) {
+            log.warn("学生重复提交作业: homeworkId={}, studentId={}, submissionId={}", homeworkId, studentId, exists);
             return error("该作业已提交，无需重复提交");
         }
         submission.setHomeworkId(homeworkId);
         submission.setStudentId(studentId);
         submission.setStudentName(SecurityUtils.getLoginUser().getUser().getNickName());
         submission.setSubmitTime(new Date());
-        return toAjax(eduPadMapper.insertHomeworkSubmission(submission));
+        int rows = eduPadMapper.insertHomeworkSubmission(submission);
+        log.info("学生提交作业完成: homeworkId={}, studentId={}, rows={}", homeworkId, studentId, rows);
+        return toAjax(rows);
     }
 
     @PreAuthorize("@ss.hasRole('teacher')")
@@ -180,25 +219,29 @@ public class EduPadController extends BaseController {
         if (submission == null || submission.getSubmissionId() == null) {
             return error("提交记录ID不能为空");
         }
-        if (submission.getScore() == null || submission.getScore() < 0 || submission.getScore() > 100) {
-            return error("作业分数必须在0-100之间");
+        if (submission.getScore() == null || submission.getScore() < HOMEWORK_MIN_SCORE || submission.getScore() > HOMEWORK_MAX_SCORE) {
+            return error("作业分数必须在" + HOMEWORK_MIN_SCORE + "-" + HOMEWORK_MAX_SCORE + "之间");
         }
         Map<String, Object> current = eduPadMapper.selectHomeworkSubmissionById(submission.getSubmissionId());
         if (current == null || current.isEmpty()) {
             return error("提交记录不存在");
         }
         Object teacherIdObj = current.get("teacher_id");
-        if (!(teacherIdObj instanceof Number) || ((Number) teacherIdObj).longValue() != SecurityUtils.getUserId()) {
+        if (!(teacherIdObj instanceof Number) || ((Number) teacherIdObj).longValue() != currentUserId()) {
             return error("只能批改自己发布作业的提交");
         }
-        return toAjax(eduPadMapper.updateHomeworkSubmissionScore(submission));
+        int rows = eduPadMapper.updateHomeworkSubmissionScore(submission);
+        if (rows > 0) {
+            notifyHomeworkReviewed(current, submission);
+        }
+        return toAjax(rows);
     }
 
     @PreAuthorize("@ss.hasRole('teacher') or @ss.hasRole('admin') or @ss.hasRole('manager')")
     @PostMapping("/exam")
     public AjaxResult createExam(@Validated @RequestBody EduExam exam) {
-        exam.setTeacherId(SecurityUtils.getUserId());
-        exam.setTeacherName(SecurityUtils.getLoginUser().getUser().getNickName());
+        exam.setTeacherId(currentUserId());
+        exam.setTeacherName(currentUserNickName());
         if (isTeacherRole()) {
             String className = getCurrentClassName();
             if (StringUtils.isEmpty(className)) {
@@ -220,7 +263,7 @@ public class EduPadController extends BaseController {
     public AjaxResult listStudentExam() {
         String className = getCurrentClassName();
         if (StringUtils.isEmpty(className)) {
-            return success(new ArrayList<>());
+            return emptyListSuccess();
         }
         return success(eduPadMapper.selectExamByClassName(className));
     }
@@ -243,8 +286,8 @@ public class EduPadController extends BaseController {
 
         EduExamScore examScore = new EduExamScore();
         examScore.setExamId(examId);
-        examScore.setStudentId(SecurityUtils.getUserId());
-        examScore.setStudentName(SecurityUtils.getLoginUser().getUser().getNickName());
+        examScore.setStudentId(currentUserId());
+        examScore.setStudentName(currentUserNickName());
         examScore.setScore(null);
         examScore.setRemark(answerContent);
         return toAjax(eduPadMapper.upsertExamScore(examScore));
@@ -294,10 +337,10 @@ public class EduPadController extends BaseController {
     @GetMapping("/student/scores")
     public AjaxResult listStudentSelfScores() {
         AjaxResult result = AjaxResult.success();
-        result.put("examScores", eduPadMapper.selectExamScoreByStudentId(SecurityUtils.getUserId()));
+        result.put("examScores", eduPadMapper.selectExamScoreByStudentId(currentUserId()));
         String className = getCurrentClassName();
         if (StringUtils.isEmpty(className)) {
-            result.put("performanceScores", new ArrayList<>());
+            result.put("performanceScores", Collections.emptyList());
         } else {
             result.put("performanceScores", eduPadMapper.selectStudentPerformanceByClassName(className));
         }
@@ -308,7 +351,7 @@ public class EduPadController extends BaseController {
     @PostMapping("/manager/teacher-task")
     public AjaxResult createTeacherTask(@Validated @RequestBody EduTeacherTask task) {
         if (task.getStatus() == null) {
-            task.setStatus("TODO");
+            task.setStatus(STATUS_TODO);
         }
         return toAjax(eduPadMapper.insertTeacherTask(task));
     }
@@ -324,9 +367,120 @@ public class EduPadController extends BaseController {
     public AjaxResult listTeacherStudentScores() {
         String className = getCurrentClassName();
         if (StringUtils.isEmpty(className)) {
-            return success(new ArrayList<>());
+            return emptyListSuccess();
         }
         return success(eduPadMapper.selectStudentPerformanceByClassName(className));
+    }
+
+    @PreAuthorize("@ss.hasRole('teacher') or @ss.hasRole('student')")
+    @GetMapping("/chat/contacts")
+    public AjaxResult listChatContacts() {
+        String className = getCurrentClassName();
+        if (StringUtils.isEmpty(className)) {
+            return emptyListSuccess();
+        }
+        String currentRole = resolveCurrentForumRole();
+        String peerRole = ROLE_TEACHER.equals(currentRole) ? ROLE_KEY_STUDENT : ROLE_KEY_TEACHER;
+        return success(eduPadMapper.selectClassChatContacts(className, currentUserId(), peerRole));
+    }
+
+    @PreAuthorize("@ss.hasRole('teacher') or @ss.hasRole('student')")
+    @GetMapping("/chat/messages")
+    public AjaxResult listChatMessages(Long peerUserId) {
+        if (peerUserId == null || peerUserId <= 0) {
+            return error("聊天对象不能为空");
+        }
+        if (!canChatWith(peerUserId)) {
+            return error("只能与本班可联系对象聊天");
+        }
+        String className = getCurrentClassName();
+        Long currentUserId = currentUserId();
+        return success(eduPadMapper.selectChatMessages(
+                className,
+                currentUserId,
+                peerUserId,
+                String.valueOf(currentUserId),
+                String.valueOf(peerUserId)));
+    }
+
+    @PreAuthorize("@ss.hasRole('teacher') or @ss.hasRole('student')")
+    @GetMapping("/chat/groups")
+    public AjaxResult listChatGroups() {
+        String className = getCurrentClassName();
+        if (StringUtils.isEmpty(className)) {
+            return emptyListSuccess();
+        }
+        List<Map<String, Object>> groups = new ArrayList<>();
+        Map<String, Object> classGroup = new HashMap<>();
+        classGroup.put("groupId", DEFAULT_CLASS_GROUP_ID);
+        classGroup.put("groupName", className + " 群聊");
+        classGroup.put("className", className);
+        groups.add(classGroup);
+        return success(groups);
+    }
+
+    @PreAuthorize("@ss.hasRole('teacher') or @ss.hasRole('student')")
+    @GetMapping("/chat/group/messages")
+    public AjaxResult listGroupChatMessages(String groupId) {
+        String className = getCurrentClassName();
+        if (StringUtils.isEmpty(className)) {
+            return emptyListSuccess();
+        }
+        if (StringUtils.isEmpty(groupId) || !DEFAULT_CLASS_GROUP_ID.equals(groupId)) {
+            return error("群聊不存在或无权限访问");
+        }
+        return success(eduPadMapper.selectGroupChatMessages(className, groupId));
+    }
+
+    @PreAuthorize("@ss.hasRole('teacher') or @ss.hasRole('student')")
+    @PostMapping("/chat/send")
+    public AjaxResult sendChatMessage(@RequestBody Map<String, Object> body) {
+        Long peerUserId = toLong(body == null ? null : body.get("peerUserId"));
+        String content = body == null ? "" : String.valueOf(body.getOrDefault("content", "")).trim();
+        if (peerUserId == null || peerUserId <= 0) {
+            return error("聊天对象不能为空");
+        }
+        if (StringUtils.isEmpty(content)) {
+            return error("消息内容不能为空");
+        }
+        if (!canChatWith(peerUserId)) {
+            return error("只能与本班可联系对象聊天");
+        }
+        EduForumPost msg = new EduForumPost();
+        msg.setTitle(CHAT_DM_TITLE);
+        msg.setContent(content);
+        msg.setAuthorId(currentUserId());
+        msg.setAuthorName(currentUserNickName());
+        msg.setAuthorRole(resolveCurrentForumRole());
+        msg.setTargetRole(String.valueOf(peerUserId));
+        msg.setClassName(getCurrentClassName());
+        return toAjax(eduPadMapper.insertForumPost(msg));
+    }
+
+    @PreAuthorize("@ss.hasRole('teacher') or @ss.hasRole('student')")
+    @PostMapping("/chat/group/send")
+    public AjaxResult sendGroupChatMessage(@RequestBody Map<String, Object> body) {
+        String groupId = body == null ? "" : String.valueOf(body.getOrDefault("groupId", "")).trim();
+        String content = body == null ? "" : String.valueOf(body.getOrDefault("content", "")).trim();
+        if (StringUtils.isEmpty(groupId) || !DEFAULT_CLASS_GROUP_ID.equals(groupId)) {
+            return error("群聊不存在或无权限发送");
+        }
+        if (StringUtils.isEmpty(content)) {
+            return error("消息内容不能为空");
+        }
+        String className = getCurrentClassName();
+        if (StringUtils.isEmpty(className)) {
+            return error("未绑定班级，无法发送群消息");
+        }
+        EduForumPost msg = new EduForumPost();
+        msg.setTitle(CHAT_GROUP_TITLE);
+        msg.setContent(content);
+        msg.setAuthorId(currentUserId());
+        msg.setAuthorName(currentUserNickName());
+        msg.setAuthorRole(resolveCurrentForumRole());
+        msg.setTargetRole(groupId);
+        msg.setClassName(className);
+        return toAjax(eduPadMapper.insertForumPost(msg));
     }
 
     @GetMapping("/forum/posts")
@@ -338,23 +492,23 @@ public class EduPadController extends BaseController {
                 : eduPadMapper.selectForumPostsByRole(role, className);
 
         if (posts == null || posts.isEmpty()) {
-            return success(new ArrayList<>());
+            return emptyListSuccess();
         }
 
         List<Long> postIds = posts.stream()
-                .map(item -> Long.valueOf(String.valueOf(item.get("post_id"))))
+                .map(item -> Long.valueOf(String.valueOf(item.get(POST_ID_KEY))))
                 .collect(Collectors.toList());
         List<Map<String, Object>> replies = eduPadMapper.selectForumRepliesByPostIds(postIds);
         Map<Long, List<Map<String, Object>>> replyMap = new HashMap<>();
         if (replies != null) {
             for (Map<String, Object> reply : replies) {
-                Long postId = Long.valueOf(String.valueOf(reply.get("post_id")));
+                Long postId = Long.valueOf(String.valueOf(reply.get(POST_ID_KEY)));
                 replyMap.computeIfAbsent(postId, key -> new ArrayList<>()).add(reply);
             }
         }
 
         for (Map<String, Object> post : posts) {
-            Long postId = Long.valueOf(String.valueOf(post.get("post_id")));
+            Long postId = Long.valueOf(String.valueOf(post.get(POST_ID_KEY)));
             post.put("replies", replyMap.getOrDefault(postId, new ArrayList<>()));
         }
 
@@ -376,8 +530,8 @@ public class EduPadController extends BaseController {
             return error("目标角色无效");
         }
 
-        post.setAuthorId(SecurityUtils.getUserId());
-        post.setAuthorName(SecurityUtils.getLoginUser().getUser().getNickName());
+        post.setAuthorId(currentUserId());
+        post.setAuthorName(currentUserNickName());
         post.setAuthorRole(role);
         post.setTargetRole(targetRole);
         if (!ROLE_MANAGER.equals(role)) {
@@ -396,8 +550,8 @@ public class EduPadController extends BaseController {
             return error("回复内容不能为空");
         }
         reply.setPostId(postId);
-        reply.setAuthorId(SecurityUtils.getUserId());
-        reply.setAuthorName(SecurityUtils.getLoginUser().getUser().getNickName());
+        reply.setAuthorId(currentUserId());
+        reply.setAuthorName(currentUserNickName());
         reply.setAuthorRole(resolveCurrentForumRole());
         return toAjax(eduPadMapper.insertForumReply(reply));
     }
@@ -451,10 +605,10 @@ public class EduPadController extends BaseController {
         }
         String exampleAnswer = body == null ? "" : String.valueOf(body.getOrDefault("exampleAnswer", "")).trim();
         String exampleFeedback = body == null ? "" : String.valueOf(body.getOrDefault("exampleFeedback", "")).trim();
-        int exampleScore = toInt(body == null ? null : body.get("exampleScore"), 80);
-        int maxScore = toInt(body == null ? null : body.get("maxScore"), 100);
+        int exampleScore = toInt(body == null ? null : body.get("exampleScore"), DEFAULT_EXAMPLE_SCORE);
+        int maxScore = toInt(body == null ? null : body.get("maxScore"), DEFAULT_EXAM_MAX_SCORE);
         if (maxScore <= 0) {
-            maxScore = 100;
+            maxScore = DEFAULT_EXAM_MAX_SCORE;
         }
         if (exampleScore < 0) {
             exampleScore = 0;
@@ -467,7 +621,7 @@ public class EduPadController extends BaseController {
         double ratio = 0.55 + 0.45 * similarity;
         int suggestedScore;
         if (StringUtils.isEmpty(exampleAnswer)) {
-            suggestedScore = Math.min(maxScore, Math.max(60, targetAnswer.length() / 8));
+            suggestedScore = Math.min(maxScore, Math.max(MIN_AI_FALLBACK_SCORE, targetAnswer.length() / 8));
         } else {
             suggestedScore = (int) Math.round(exampleScore * ratio);
         }
@@ -557,7 +711,7 @@ public class EduPadController extends BaseController {
                 gradeNo,
                 classNo,
                 className,
-                "teacher".equals(roleKey) ? 1 : 0);
+                ROLE_KEY_TEACHER.equals(roleKey) ? 1 : 0);
         if (rows <= 0) {
             return "注册失败，班级信息写入失败";
         }
@@ -577,12 +731,12 @@ public class EduPadController extends BaseController {
                     gradeNo,
                     classNo,
                     buildClassName(gradeNo, classNo),
-                    "teacher".equals(roleKey) ? 1 : 0
+                    ROLE_KEY_TEACHER.equals(roleKey) ? 1 : 0
             );
             return rows > 0;
         }
-        Object pGrade = profile.get("grade_no");
-        Object pClass = profile.get("class_no");
+        Object pGrade = profile.get(GRADE_NO_KEY);
+        Object pClass = profile.get(CLASS_NO_KEY);
         if (!(pGrade instanceof Number) || !(pClass instanceof Number)) {
             return false;
         }
@@ -592,11 +746,11 @@ public class EduPadController extends BaseController {
 
     private String resolveUserRoleKey(Long userId) {
         for (SysRole role : roleMapper.selectRolePermissionByUserId(userId)) {
-            if ("teacher".equalsIgnoreCase(role.getRoleKey())) {
-                return "teacher";
+            if (ROLE_KEY_TEACHER.equalsIgnoreCase(role.getRoleKey())) {
+                return ROLE_KEY_TEACHER;
             }
-            if ("student".equalsIgnoreCase(role.getRoleKey()) || "role_default".equalsIgnoreCase(role.getRoleKey())) {
-                return "student";
+            if (ROLE_KEY_STUDENT.equalsIgnoreCase(role.getRoleKey()) || ROLE_KEY_DEFAULT_STUDENT.equalsIgnoreCase(role.getRoleKey())) {
+                return ROLE_KEY_STUDENT;
             }
         }
         return "";
@@ -604,11 +758,11 @@ public class EduPadController extends BaseController {
 
     private String normalizeRegisterRoleKey(String roleKey) {
         String normalized = StringUtils.trimToEmpty(roleKey).toLowerCase();
-        if ("teacher".equals(normalized)) {
-            return "teacher";
+        if (ROLE_KEY_TEACHER.equals(normalized)) {
+            return ROLE_KEY_TEACHER;
         }
-        if ("student".equals(normalized)) {
-            return "student";
+        if (ROLE_KEY_STUDENT.equals(normalized)) {
+            return ROLE_KEY_STUDENT;
         }
         return "";
     }
@@ -617,7 +771,8 @@ public class EduPadController extends BaseController {
         if (gradeNo == null || classNo == null) {
             return false;
         }
-        return gradeNo >= 1 && gradeNo <= 5 && classNo >= 1 && classNo <= 10;
+        return gradeNo >= MIN_GRADE_NO && gradeNo <= MAX_GRADE_NO
+                && classNo >= MIN_CLASS_NO && classNo <= MAX_CLASS_NO;
     }
 
     private String buildClassName(Integer gradeNo, Integer classNo) {
@@ -625,8 +780,41 @@ public class EduPadController extends BaseController {
     }
 
     private void fillTeacherInfo(EduHomework homework) {
-        homework.setTeacherId(SecurityUtils.getUserId());
-        homework.setTeacherName(SecurityUtils.getLoginUser().getUser().getNickName());
+        homework.setTeacherId(currentUserId());
+        homework.setTeacherName(currentUserNickName());
+    }
+
+    private void notifyHomeworkReviewed(Map<String, Object> current, EduHomeworkSubmission submission) {
+        if (current == null || submission == null) {
+            return;
+        }
+        Long studentId = toLong(current.get("student_id"));
+        if (studentId == null || studentId <= 0) {
+            return;
+        }
+        String className = String.valueOf(current.getOrDefault("class_name", ""));
+        String homeworkTitle = String.valueOf(current.getOrDefault("homework_title", "作业"));
+        String feedback = StringUtils.trimToEmpty(submission.getFeedback())
+                .replaceAll("\\n?\\[REVIEW_IMAGE\\]\\(([^)\\s]+)\\)\\s*", "")
+                .trim();
+        String brief = StringUtils.isEmpty(feedback)
+                ? ""
+                : "，评语：" + StringUtils.substring(feedback, 0, 40);
+        String msgContent = "你的《" + homeworkTitle + "》已批改，分数：" + submission.getScore() + brief;
+        try {
+            EduForumPost msg = new EduForumPost();
+            msg.setTitle(CHAT_DM_TITLE);
+            msg.setContent(msgContent);
+            msg.setAuthorId(currentUserId());
+            msg.setAuthorName(currentUserNickName());
+            msg.setAuthorRole(resolveCurrentForumRole());
+            msg.setTargetRole(String.valueOf(studentId));
+            msg.setClassName(className);
+            eduPadMapper.insertForumPost(msg);
+        } catch (Exception ex) {
+            log.warn("作业批改消息发送失败: submissionId={}, studentId={}, reason={}",
+                    submission.getSubmissionId(), studentId, ex.getMessage());
+        }
     }
 
     private String resolveCurrentForumRole() {
@@ -639,7 +827,7 @@ public class EduPadController extends BaseController {
                 }
             }
             for (SysRole role : roles) {
-                if ("teacher".equalsIgnoreCase(role.getRoleKey())) {
+                if (ROLE_KEY_TEACHER.equalsIgnoreCase(role.getRoleKey())) {
                     return ROLE_TEACHER;
                 }
             }
@@ -678,7 +866,7 @@ public class EduPadController extends BaseController {
         if (roles == null) {
             return false;
         }
-        return roles.stream().anyMatch(role -> "teacher".equalsIgnoreCase(role.getRoleKey()));
+        return roles.stream().anyMatch(role -> ROLE_KEY_TEACHER.equalsIgnoreCase(role.getRoleKey()));
     }
 
     private String getCurrentClassName() {
@@ -686,8 +874,41 @@ public class EduPadController extends BaseController {
         if (profile == null) {
             return null;
         }
-        Object className = profile.get("class_name");
+        Object className = profile.get(CLASS_NAME_KEY);
         return className == null ? null : String.valueOf(className);
+    }
+
+    private boolean canChatWith(Long peerUserId) {
+        Long currentUserId = SecurityUtils.getUserId();
+        if (peerUserId == null || currentUserId.equals(peerUserId)) {
+            return false;
+        }
+        Map<String, Object> current = eduPadMapper.selectUserClassProfileByUserId(currentUserId);
+        Map<String, Object> peer = eduPadMapper.selectUserClassProfileByUserId(peerUserId);
+        if (current == null || peer == null) {
+            return false;
+        }
+        String currentClassName = String.valueOf(current.get(CLASS_NAME_KEY));
+        String peerClassName = String.valueOf(peer.get(CLASS_NAME_KEY));
+        if (StringUtils.isEmpty(currentClassName) || !currentClassName.equals(peerClassName)) {
+            return false;
+        }
+        String currentRole = String.valueOf(current.get(ROLE_KEY_KEY));
+        String peerRole = String.valueOf(peer.get(ROLE_KEY_KEY));
+        return (ROLE_KEY_TEACHER.equalsIgnoreCase(currentRole) && ROLE_KEY_STUDENT.equalsIgnoreCase(peerRole))
+                || (ROLE_KEY_STUDENT.equalsIgnoreCase(currentRole) && ROLE_KEY_TEACHER.equalsIgnoreCase(peerRole));
+    }
+
+    private Long currentUserId() {
+        return SecurityUtils.getUserId();
+    }
+
+    private String currentUserNickName() {
+        return SecurityUtils.getLoginUser().getUser().getNickName();
+    }
+
+    private AjaxResult emptyListSuccess() {
+        return success(Collections.emptyList());
     }
 
     private int toInt(Object value, int defaultValue) {
@@ -698,6 +919,17 @@ public class EduPadController extends BaseController {
             return Integer.parseInt(String.valueOf(value));
         } catch (Exception ex) {
             return defaultValue;
+        }
+    }
+
+    private Long toLong(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (Exception ex) {
+            return null;
         }
     }
 
