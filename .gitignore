@@ -1,0 +1,7 @@
+# Ignore local environment files
+.env
+**/.env
+
+# Keep examples in repo
+!.env.example
+!**/.env.example
