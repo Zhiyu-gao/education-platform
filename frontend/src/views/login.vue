@@ -68,13 +68,40 @@
 
       <section id="features" class="section">
         <h2>围绕当前技术栈与角色权限的核心能力</h2>
+        <p class="section-subtitle">
+          从主控端业务管理到 Pad 端教学协同，统一架构让管理、教学与 AI 能力高效联动。
+        </p>
         <div class="feature-grid">
-          <div class="feature-card">管理者全局成绩视角</div>
-          <div class="feature-card">老师/学生 Pad 端分离</div>
-          <div class="feature-card">角色权限隔离（管理者/老师/学生）</div>
-          <div class="feature-card">作业与考试任务编排</div>
-          <div class="feature-card">AI 助手（RAG / 成绩预测）</div>
-          <div class="feature-card">前后端服务职责解耦</div>
+          <article class="feature-card">
+            <div class="feature-icon lavender">📊</div>
+            <h3>管理者全局视角</h3>
+            <p>汇总查看班级成绩与教学数据，支撑学校级管理决策与任务统筹。</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon mint">🧩</div>
+            <h3>主控端 / Pad 端分离</h3>
+            <p>管理者在主控端处理全局业务，老师与学生在 Pad 端完成教学闭环。</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon lilac">👥</div>
+            <h3>角色权限隔离</h3>
+            <p>管理者、老师、学生按角色授权访问，页面能力和数据范围严格分开。</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon sand">📝</div>
+            <h3>作业考试编排</h3>
+            <p>支持作业发布、考试安排、成绩回收与结果追踪，流程清晰可控。</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon sky">🤖</div>
+            <h3>AI 助手能力</h3>
+            <p>通过 FastAPI 提供 RAG 问答与成绩预测能力，服务老师和学生的学习场景。</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon rose">🛡️</div>
+            <h3>服务边界清晰</h3>
+            <p>Spring Boot 聚焦核心业务与鉴权，FastAPI 专注 AI 服务，降低耦合风险。</p>
+          </article>
         </div>
       </section>
     </main>
@@ -296,16 +323,27 @@ getCookie()
 }
 
 .code-item {
-  display: grid;
-  grid-template-columns: 1fr 108px;
+  margin-bottom: 18px;
+}
+
+.code-item :deep(.el-form-item__content) {
+  display: flex;
+  align-items: center;
   gap: 10px;
+  flex-wrap: nowrap;
+}
+
+.code-item :deep(.el-input) {
+  flex: 1;
+  min-width: 0;
 }
 
 .code-img {
-  width: 100%;
+  width: 108px;
   height: 40px;
   border-radius: 8px;
   cursor: pointer;
+  flex: 0 0 108px;
 }
 
 .row-between {
@@ -383,26 +421,83 @@ getCookie()
 .section h2 {
   text-align: center;
   font-size: clamp(30px, 3.4vw, 52px);
-  margin-bottom: 28px;
+  margin-bottom: 16px;
+}
+
+.section-subtitle {
+  margin: 0 auto 30px;
+  max-width: 760px;
+  text-align: center;
+  color: #6f7c97;
+  font-size: 18px;
+  line-height: 1.7;
 }
 
 .feature-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  gap: 18px;
 }
 
 .feature-card {
   background: #fff;
-  border: 1px solid #e3e8f2;
-  border-radius: 14px;
-  min-height: 120px;
+  border: 1px solid #dde4f0;
+  border-radius: 22px;
+  min-height: 220px;
+  padding: 34px 30px 30px;
+  box-sizing: border-box;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-4px);
+  border-color: #cfd8ea;
+  box-shadow: 0 14px 30px rgba(34, 60, 110, 0.08);
+}
+
+.feature-icon {
+  width: 74px;
+  height: 74px;
+  border-radius: 20px;
   display: grid;
   place-items: center;
-  color: #42506e;
-  font-weight: 600;
-  padding: 0 10px;
-  text-align: center;
+  font-size: 30px;
+  margin-bottom: 22px;
+}
+
+.feature-card h3 {
+  margin: 0;
+  color: #222d44;
+  font-size: 22px;
+}
+
+.feature-card p {
+  margin: 14px 0 0;
+  color: #647593;
+  font-size: 18px;
+  line-height: 1.6;
+}
+
+.lavender { background: #ededfb; }
+.mint { background: #e9f4f0; }
+.lilac { background: #efeafa; }
+.sand { background: #f5efe8; }
+.sky { background: #e8f2f8; }
+.rose { background: #f8eaf2; }
+
+@media (max-width: 1280px) {
+  .feature-card {
+    min-height: 240px;
+    padding: 28px 24px;
+  }
+
+  .feature-card h3 {
+    font-size: 20px;
+  }
+
+  .feature-card p {
+    font-size: 17px;
+  }
 }
 
 @media (max-width: 960px) {
@@ -416,6 +511,10 @@ getCookie()
 
   .hero p {
     font-size: 18px;
+  }
+
+  .section-subtitle {
+    font-size: 16px;
   }
 }
 
@@ -438,6 +537,27 @@ getCookie()
 
   .feature-grid {
     grid-template-columns: 1fr;
+  }
+
+  .feature-card {
+    min-height: auto;
+    padding: 24px 20px;
+    border-radius: 18px;
+  }
+
+  .feature-icon {
+    width: 64px;
+    height: 64px;
+    font-size: 26px;
+    margin-bottom: 16px;
+  }
+
+  .feature-card h3 {
+    font-size: 20px;
+  }
+
+  .feature-card p {
+    font-size: 16px;
   }
 }
 </style>
