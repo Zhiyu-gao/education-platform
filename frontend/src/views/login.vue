@@ -56,7 +56,7 @@
     <main>
       <section class="hero">
         <div class="badge">主控端 / Pad 端 / Spring Boot / FastAPI</div>
-        <h1>教育平台统一入口<br /><span>管理与教学分端协同</span></h1>
+        <h1>教育平台统一入口 <span>管理与教学分端协同</span></h1>
         <p>
           主控制台负责管理者全局业务；Pad 端面向老师与学生；Spring Boot 承载核心业务，FastAPI 专注 AI 能力。
         </p>
@@ -329,6 +329,9 @@ getCookie()
   margin: 80px auto 40px;
   text-align: center;
   padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .badge {
@@ -345,6 +348,9 @@ getCookie()
   font-size: clamp(40px, 5vw, 72px);
   line-height: 1.1;
   margin: 20px 0 14px;
+  white-space: nowrap;
+  display: inline-block;
+  text-align: center;
 }
 
 .hero h1 span {
@@ -352,10 +358,13 @@ getCookie()
 }
 
 .hero p {
-  margin: 0 auto;
-  max-width: 760px;
+  margin: 0;
+  max-width: none;
   color: #6d7a95;
   font-size: 20px;
+  white-space: nowrap;
+  display: inline-block;
+  text-align: center;
 }
 
 .hero-actions {
@@ -413,6 +422,14 @@ getCookie()
 @media (max-width: 640px) {
   .hero {
     margin-top: 44px;
+  }
+
+  .hero h1 {
+    white-space: normal;
+  }
+
+  .hero p {
+    white-space: normal;
   }
 
   .hero-actions {
