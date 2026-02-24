@@ -3,24 +3,24 @@
     <header class="top-nav">
       <div class="nav-inner">
         <div class="brand">
-          <div class="brand-icon">P</div>
-          <span>PAD HelpDesk</span>
+          <div class="brand-icon">教</div>
+          <span>教育平台主控端</span>
         </div>
 
         <nav class="nav-links">
-          <a href="#features">Features</a>
-          <a href="#channels">Channels</a>
-          <a href="#ai">AI Assistant</a>
-          <a href="#pricing">Pricing</a>
+          <a href="#features">核心能力</a>
+          <a href="#channels">端口分离</a>
+          <a href="#ai">AI 服务</a>
+          <a href="#security">权限安全</a>
         </nav>
 
         <div class="nav-actions" ref="navRef">
-          <button class="btn ghost" @click.stop="showLoginPanel = !showLoginPanel">Sign In</button>
-          <button class="btn primary">Start Free</button>
+          <button class="btn ghost" @click.stop="showLoginPanel = !showLoginPanel">管理端登录</button>
+          <button class="btn primary" @click="goPadAuth">Pad 端入口</button>
 
           <el-card v-show="showLoginPanel" shadow="always" class="nav-login-panel" @click.stop>
             <template #header>
-              <div class="panel-title">账号登录</div>
+              <div class="panel-title">主控制台账号登录</div>
             </template>
 
             <el-form ref="loginRef" :model="loginForm" :rules="loginRules" class="login-form" auto-complete="on">
@@ -55,26 +55,26 @@
 
     <main>
       <section class="hero">
-        <div class="badge">Rated #1 in Customer Satisfaction</div>
-        <h1>Delight Your Customers<br /><span>With Every Interaction</span></h1>
+        <div class="badge">主控端 / Pad 端 / Spring Boot / FastAPI</div>
+        <h1>教育平台统一入口<br /><span>管理与教学分端协同</span></h1>
         <p>
-          统一会话、智能分配、自动化处理，让老师和学生在 Pad 端获得更顺滑的服务体验。
+          主控制台负责管理者全局业务；Pad 端面向老师与学生；Spring Boot 承载核心业务，FastAPI 专注 AI 能力。
         </p>
         <div class="hero-actions">
-          <button class="btn primary">Start 14-Day Free Trial</button>
-          <button class="btn ghost">Watch Demo</button>
+          <button class="btn primary" @click="showLoginPanel = true">进入管理端登录</button>
+          <button class="btn ghost" @click="goPadAuth">进入 Pad 端</button>
         </div>
       </section>
 
       <section id="features" class="section">
-        <h2>Everything You Need for Great Support</h2>
+        <h2>围绕当前技术栈与角色权限的核心能力</h2>
         <div class="feature-grid">
-          <div class="feature-card">Unified Inbox</div>
-          <div class="feature-card">Smart Automation</div>
-          <div class="feature-card">Team Collaboration</div>
-          <div class="feature-card">Real-time Analytics</div>
-          <div class="feature-card">Knowledge Base</div>
-          <div class="feature-card">Enterprise Security</div>
+          <div class="feature-card">管理者全局成绩视角</div>
+          <div class="feature-card">老师/学生 Pad 端分离</div>
+          <div class="feature-card">角色权限隔离（管理者/老师/学生）</div>
+          <div class="feature-card">作业与考试任务编排</div>
+          <div class="feature-card">AI 助手（RAG / 成绩预测）</div>
+          <div class="feature-card">前后端服务职责解耦</div>
         </div>
       </section>
     </main>
@@ -170,6 +170,10 @@ function handleLogin() {
         if (captchaEnabled.value) getCode()
       })
   })
+}
+
+function goPadAuth() {
+  router.push('/education/auth?redirect=/education/pad')
 }
 
 function getCode() {
@@ -349,7 +353,7 @@ getCookie()
 
 .hero p {
   margin: 0 auto;
-  max-width: 700px;
+  max-width: 760px;
   color: #6d7a95;
   font-size: 20px;
 }
@@ -388,6 +392,8 @@ getCookie()
   place-items: center;
   color: #42506e;
   font-weight: 600;
+  padding: 0 10px;
+  text-align: center;
 }
 
 @media (max-width: 960px) {
