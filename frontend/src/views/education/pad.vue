@@ -168,7 +168,7 @@
                     v-if="extractReviewImageFromFeedback(row.feedback)"
                     link
                     type="primary"
-                    @click="window.open(resolveFileUrl(extractReviewImageFromFeedback(row.feedback)), '_blank')"
+                    @click="openReviewImage(extractReviewImageFromFeedback(row.feedback), 'teacher-list')"
                   >
                     查看
                   </el-button>
@@ -364,7 +364,7 @@
                     v-if="row.reviewImageUrl"
                     link
                     type="primary"
-                    @click="window.open(resolveFileUrl(row.reviewImageUrl), '_blank')"
+                    @click="openReviewImage(row.reviewImageUrl, 'student-list')"
                   >
                     查看
                   </el-button>
@@ -908,14 +908,18 @@ const examSubmitForm = reactive({ examId: '', examTitle: '', answerContent: '', 
 
 const goTo = (path) => router.push(path)
 const baseApi = import.meta.env.VITE_APP_BASE_API
-const aiBaseApi = String(import.meta.env.VITE_AI_BASE_API || '').trim().replace(/\/$/, '')
+const aiBaseApi = String(import.meta.env.VITE_AI_BASE_API || 'http://127.0.0.1:8000').trim().replace(/\/$/, '')
 const homeworkUploadTypes = computed(() => {
   if (homeworkForm.publishMode === 'word') return ['doc', 'docx']
   if (homeworkForm.publishMode === 'pdf') return ['pdf']
   return ['txt']
 })
 const answerImageTypes = ['png', 'jpg', 'jpeg', 'bmp', 'gif']
-const reviewAnswerImageUrl = computed(() => extractImageUrl(reviewForm.answerContent))
+const reviewAnswerImageUrl = computed(() => {
+  const reviewedUrl = resolveFileUrl(reviewForm.reviewImageUrl)
+  if (reviewedUrl) return reviewedUrl
+  return extractImageUrl(reviewForm.answerContent)
+})
 const REVIEW_IMAGE_MARKER = '[REVIEW_IMAGE]'
 const TEACHER_REASON_START = '[TEACHER_REASON]'
 const TEACHER_REASON_END = '[/TEACHER_REASON]'
@@ -985,6 +989,7 @@ function resolveFileUrl(url) {
   const value = String(url || '').trim()
   if (!value) return ''
   if (value.startsWith('http')) return value
+  if (value.startsWith('//')) return `${window.location.protocol}${value}`
   // 已经包含网关前缀时，不再重复拼接，避免出现 /dev-api/dev-api/...
   if (/^\/(dev-api|prod-api|stage-api)\b/.test(value)) return value
   // AI 批改图由 AI 服务静态目录 /files 提供
@@ -998,6 +1003,20 @@ function resolveFileUrl(url) {
     return normalizedPath
   }
   return `${normalizedBase}${normalizedPath}`
+}
+
+function openReviewImage(rawUrl, scene = 'unknown') {
+  const resolved = resolveFileUrl(rawUrl)
+  console.info('[Pad][ReviewImage] open', {
+    scene,
+    rawUrl: String(rawUrl || ''),
+    resolvedUrl: resolved
+  })
+  if (!resolved) {
+    ElMessage.warning('批改图地址为空')
+    return
+  }
+  window.open(resolved, '_blank')
 }
 
 function extractImageUrl(text) {
@@ -1015,13 +1034,19 @@ function extractImageUrl(text) {
 
 function extractReviewImageFromFeedback(feedback) {
   const value = String(feedback || '')
-  const match = value.match(/\[REVIEW_IMAGE\]\(([^)\s]+)\)/i)
-  return match?.[1] || ''
+  const reviewMarker = value.match(/\[(REVIEW_IMAGE|标注图)\]\(([^)\s]+)\)/i)
+  if (reviewMarker?.[2]) return reviewMarker[2]
+  const markdownImage = value.match(/!\[[^\]]*]\(([^)\s]+)\)/i)
+  if (markdownImage?.[1]) return markdownImage[1]
+  const filePath = value.match(/((https?:\/\/|\/)files\/[^\s)\]]+)/i)
+  if (filePath?.[1]) return filePath[1]
+  return ''
 }
 
 function stripReviewImageFromFeedback(feedback) {
   return String(feedback || '')
-    .replace(/\n?\[REVIEW_IMAGE\]\(([^)\s]+)\)\s*/ig, '')
+    .replace(/\n?\[(REVIEW_IMAGE|标注图)\]\(([^)\s]+)\)\s*/ig, '')
+    .replace(/\n?!\[[^\]]*]\(([^)\s]+)\)\s*/ig, '')
     .trim()
 }
 
@@ -1426,7 +1451,18 @@ function openReviewDialogWithAnswer() {
   reviewCanvasMarks.value = []
   reviewImageUrl.value = ''
   reviewCanvasImage = null
-  const maybeImageUrl = extractImageUrl(reviewForm.answerContent)
+  const reviewedImageUrl = resolveFileUrl(reviewForm.reviewImageUrl)
+  const answerImageUrl = extractImageUrl(reviewForm.answerContent)
+  const maybeImageUrl = reviewedImageUrl || answerImageUrl
+  console.info('[Pad][Review] open-dialog', {
+    type: reviewType.value,
+    submissionId: reviewForm.submissionId,
+    scoreId: reviewForm.scoreId,
+    storedReviewImage: reviewForm.reviewImageUrl,
+    reviewedImageUrl,
+    answerImageUrl,
+    baseCanvasImage: maybeImageUrl
+  })
   nextTick(() => {
     initReviewCanvas()
     if (maybeImageUrl) {
@@ -1451,6 +1487,14 @@ async function handleSubmitReview() {
     }
     const roleSeparatedFeedback = mergeTeacherStudentFeedback(reviewForm.feedback, reviewForm.studentResultText)
     const mergedFeedback = mergeFeedbackWithReviewImage(roleSeparatedFeedback, uploadedReviewImageUrl)
+    console.info('[Pad][Review] submit-homework', {
+      submissionId: reviewForm.submissionId,
+      score: reviewForm.score,
+      hasCanvasDrawMarks,
+      hasLocalCanvasImage,
+      uploadedReviewImageUrl,
+      mergedFeedbackLength: String(mergedFeedback || '').length
+    })
     await scoreHomeworkApi({
       submissionId: reviewForm.submissionId,
       score: reviewForm.score,

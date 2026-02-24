@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -80,6 +82,7 @@ public class EduPadController extends BaseController {
     private static final String ROLE_TEACHER = "TEACHER";
     private static final String ROLE_STUDENT = "STUDENT";
     private static final String ROLE_ALL = "ALL";
+    private static final Pattern REVIEW_IMAGE_PATTERN = Pattern.compile("\\[(REVIEW_IMAGE|标注图)]\\(([^)\\s]+)\\)", Pattern.CASE_INSENSITIVE);
 
     @Autowired
     private EduPadMapper eduPadMapper;
@@ -204,13 +207,39 @@ public class EduPadController extends BaseController {
     @PreAuthorize("@ss.hasRole('teacher')")
     @GetMapping("/homework/submissions")
     public AjaxResult listHomeworkSubmissionsByTeacher() {
-        return success(eduPadMapper.selectHomeworkSubmissionByTeacherId(SecurityUtils.getUserId()));
+        List<Map<String, Object>> list = eduPadMapper.selectHomeworkSubmissionByTeacherId(SecurityUtils.getUserId());
+        if (list == null) {
+            list = Collections.emptyList();
+        }
+        int hasImageCount = 0;
+        for (Map<String, Object> item : list) {
+            String feedback = String.valueOf(item == null ? "" : item.getOrDefault("feedback", ""));
+            if (StringUtils.isNotEmpty(extractReviewImageUrlFromFeedback(feedback))) {
+                hasImageCount++;
+            }
+        }
+        log.info("查询教师作业提交: teacherId={}, total={}, withReviewImage={}",
+                SecurityUtils.getUserId(), list.size(), hasImageCount);
+        return success(list);
     }
 
     @PreAuthorize("@ss.hasRole('student')")
     @GetMapping("/homework/submissions/student")
     public AjaxResult listHomeworkSubmissionsByStudent() {
-        return success(eduPadMapper.selectHomeworkSubmissionByStudentId(SecurityUtils.getUserId()));
+        List<Map<String, Object>> list = eduPadMapper.selectHomeworkSubmissionByStudentId(SecurityUtils.getUserId());
+        if (list == null) {
+            list = Collections.emptyList();
+        }
+        int hasImageCount = 0;
+        for (Map<String, Object> item : list) {
+            String feedback = String.valueOf(item == null ? "" : item.getOrDefault("feedback", ""));
+            if (StringUtils.isNotEmpty(extractReviewImageUrlFromFeedback(feedback))) {
+                hasImageCount++;
+            }
+        }
+        log.info("查询学生作业提交: studentId={}, total={}, withReviewImage={}",
+                SecurityUtils.getUserId(), list.size(), hasImageCount);
+        return success(list);
     }
 
     @PreAuthorize("@ss.hasRole('teacher')")
@@ -230,8 +259,18 @@ public class EduPadController extends BaseController {
         if (!(teacherIdObj instanceof Number) || ((Number) teacherIdObj).longValue() != currentUserId()) {
             return error("只能批改自己发布作业的提交");
         }
+        String requestFeedback = StringUtils.trimToEmpty(submission.getFeedback());
+        String requestReviewImage = extractReviewImageUrlFromFeedback(requestFeedback);
+        log.info("作业批改提交: submissionId={}, teacherId={}, score={}, feedbackLength={}, reviewImage={}",
+                submission.getSubmissionId(), currentUserId(), submission.getScore(),
+                requestFeedback.length(), requestReviewImage);
         int rows = eduPadMapper.updateHomeworkSubmissionScore(submission);
         if (rows > 0) {
+            Map<String, Object> updated = eduPadMapper.selectHomeworkSubmissionById(submission.getSubmissionId());
+            String savedFeedback = String.valueOf(updated == null ? "" : updated.getOrDefault("feedback", ""));
+            String savedReviewImage = extractReviewImageUrlFromFeedback(savedFeedback);
+            log.info("作业批改保存完成: submissionId={}, rows={}, savedFeedbackLength={}, savedReviewImage={}",
+                    submission.getSubmissionId(), rows, savedFeedback.length(), savedReviewImage);
             notifyHomeworkReviewed(current, submission);
         }
         return toAjax(rows);
@@ -763,6 +802,18 @@ public class EduPadController extends BaseController {
         }
         if (ROLE_KEY_STUDENT.equals(normalized)) {
             return ROLE_KEY_STUDENT;
+        }
+        return "";
+    }
+
+    private String extractReviewImageUrlFromFeedback(String feedback) {
+        String value = StringUtils.trimToEmpty(feedback);
+        if (StringUtils.isEmpty(value)) {
+            return "";
+        }
+        Matcher matcher = REVIEW_IMAGE_PATTERN.matcher(value);
+        if (matcher.find() && matcher.groupCount() >= 2) {
+            return StringUtils.trimToEmpty(matcher.group(2));
         }
         return "";
     }

@@ -178,14 +178,26 @@ function datasetTime(dataset = {}) {
 }
 
 const handleFileChange = (file, uploadFiles) => {
-  const validFiles = uploadFiles.filter((f) => {
+  const pool = [...fileList.value, ...uploadFiles]
+  const validFiles = pool.filter((f) => {
     const name = (f.name || '').toLowerCase()
     return name.endsWith('.xlsx') || name.endsWith('.xls') || name.endsWith('.txt')
   })
-  if (validFiles.length !== uploadFiles.length) {
+  if (validFiles.length !== pool.length) {
     ElMessage.warning('仅支持 .xlsx / .xls / .txt 文件')
   }
-  fileList.value = validFiles.slice(0, 5)
+  const deduped = []
+  const seen = new Set()
+  for (const item of validFiles) {
+    const key = `${item.name || ''}_${item.size || 0}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    deduped.push(item)
+  }
+  if (deduped.length > 5) {
+    ElMessage.warning('最多上传 5 个文件')
+  }
+  fileList.value = deduped.slice(0, 5)
 }
 
 const handleExceed = () => {
@@ -227,6 +239,7 @@ const submitUpload = async () => {
     }
   } finally {
     uploadLoading.value = false
+    fileList.value = []
     await nextTick()
     scrollToBottom()
   }
@@ -257,13 +270,10 @@ const submitQuery = async () => {
     const answer = response.answer || response.data || response.msg || '暂无响应'
     const sources = Array.isArray(response.sources) ? response.sources : []
     let finalText = String(answer)
-    if (sources.length) {
-      const sourceLines = sources.slice(0, 5).map((src, idx) => {
-        const fileName = src.fileName || '未知文件'
-        const snippet = src.snippet || ''
-        return `${idx + 1}. ${fileName}（score=${src.score ?? '--'}）\n${snippet}`
-      })
-      finalText += `\n\n参考片段：\n${sourceLines.join('\n\n')}`
+    if (sources.length && !finalText.includes('（已参考')) {
+      const fileCount = new Set(sources.map((item) => item.fileName || '').filter(Boolean)).size
+      const fileTip = fileCount ? `，涉及 ${fileCount} 个文件` : ''
+      finalText += `\n\n（已参考 ${sources.length} 条知识片段${fileTip}）`
     }
     appendMessage('ai', finalText)
   } catch (error) {

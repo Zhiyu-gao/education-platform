@@ -1,4 +1,5 @@
 import os
+import re
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from datetime import datetime
 from typing import Any
@@ -91,6 +92,13 @@ class RAGService:
     FALLBACK_TOP_K = 5
     MAX_STRONG_CHUNKS = 20
     MAX_CONTEXT_CHARS = 4200
+    FIELD_PATTERNS = {
+        "Exam_Score": [r"Exam_Score", r"Exam Score", r"考试成绩", r"成绩"],
+        "Hours_Studied": [r"Hours_Studied", r"Hours Studied", r"学习时长", r"学习时间"],
+        "Sleep_Hours": [r"Sleep_Hours", r"Sleep Hours", r"睡眠时长", r"睡眠时间"],
+        "Previous_Scores": [r"Previous_Scores", r"Previous Scores", r"之前成绩", r"历史成绩"],
+        "Motivation_Level": [r"Motivation_Level", r"Motivation Level", r"学习动力", r"动力水平"],
+    }
 
     @staticmethod
     def _serialize_dataset(dataset: RagDataset) -> dict[str, Any]:
@@ -224,8 +232,32 @@ class RAGService:
 
     @staticmethod
     def _local_fallback_answer(context):
-        preview = context[:1200] if context else "未检索到相关知识。"
-        return f"当前未启用在线大模型，以下是本地知识库检索结果：\n{preview}"
+        context_text = (context or "").strip()
+        if not context_text:
+            return "未检索到相关知识。"
+
+        lines = [line.strip() for line in context_text.splitlines() if line.strip()]
+        advice = []
+        for line in lines:
+            for tag in ("优化方案：", "调整方案：", "提升方案：", "维持方案：", "建议："):
+                if tag in line:
+                    part = line.split(tag, 1)[1].strip("；;，, ")
+                    if part:
+                        advice.append(part)
+                    break
+            if len(advice) >= 3:
+                break
+
+        if not advice:
+            preview = context_text[:300]
+            return f"已命中相关资料。结论：当前信息可用于分析，建议优先围绕薄弱项做针对训练。\n依据摘要：{preview}"
+
+        unique_advice = []
+        for item in advice:
+            if item not in unique_advice:
+                unique_advice.append(item)
+        bullets = [f"{idx + 1}. {text}" for idx, text in enumerate(unique_advice[:3])]
+        return "结论：已命中可执行的提分建议。\n建议：\n" + "\n".join(bullets)
 
     @staticmethod
     def _local_general_answer(question):
@@ -286,6 +318,32 @@ class RAGService:
         }
 
     @staticmethod
+    def _pick_diverse_sources(sources: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+        if not sources or limit <= 0:
+            return []
+        grouped: dict[Any, list[dict[str, Any]]] = {}
+        for src in sorted(sources, key=lambda x: x.get("score", 0), reverse=True):
+            key = src.get("datasetId")
+            grouped.setdefault(key, []).append(src)
+
+        selected: list[dict[str, Any]] = []
+        dataset_order = [k for k in grouped.keys()]
+        idx = 0
+        while len(selected) < limit and dataset_order:
+            dataset_key = dataset_order[idx % len(dataset_order)]
+            bucket = grouped.get(dataset_key, [])
+            if bucket:
+                selected.append(bucket.pop(0))
+            if not bucket:
+                dataset_order.remove(dataset_key)
+                if not dataset_order:
+                    break
+                idx = idx % len(dataset_order)
+            else:
+                idx += 1
+        return selected
+
+    @staticmethod
     def _retrieve_context(question: str, active_ids: list[int]) -> dict[str, Any]:
         query_vec = _embed_texts([question])[0]
         result = qdrant_client.query_points(
@@ -312,15 +370,12 @@ class RAGService:
                 strong_sources.append(source)
             if score >= RAGService.MIN_FALLBACK_SCORE:
                 fallback_sources.append(source)
-            if len(strong_sources) >= RAGService.MAX_STRONG_CHUNKS:
-                break
 
         if strong_sources:
-            selected = strong_sources[: RAGService.MAX_STRONG_CHUNKS]
+            selected = RAGService._pick_diverse_sources(strong_sources, RAGService.MAX_STRONG_CHUNKS)
             mode = "strong"
         else:
-            fallback_sources.sort(key=lambda x: x["score"], reverse=True)
-            selected = fallback_sources[: RAGService.FALLBACK_TOP_K]
+            selected = RAGService._pick_diverse_sources(fallback_sources, RAGService.FALLBACK_TOP_K)
             mode = "fallback" if selected else "none"
 
         texts = []
@@ -342,9 +397,110 @@ class RAGService:
     @staticmethod
     def _build_rag_prompt(question: str, context: str):
         return [
-            {"role": "system", "content": "你是教育平台RAG助手。仅依据给定资料回答，不要编造。若资料不足要明确说明。"},
+            {
+                "role": "system",
+                "content": (
+                    "你是教育平台RAG助手。仅依据给定资料回答，不要编造。"
+                    "当资料中已经出现可用于分析的学生字段（如 Exam_Score、Hours_Studied、Sleep_Hours、Previous_Scores 等）时，"
+                    "必须先给出可执行建议，不要直接回答“无法给建议”。"
+                    "输出必须是总结性表达，先给结论，再给 3-5 条编号建议，避免复述检索片段原文。"
+                    "只有在完全没有相关字段时，才说明信息不足，并明确需要补充哪些字段。"
+                ),
+            },
             {"role": "user", "content": f"【资料】\n{context}\n\n【问题】\n{question}"},
         ]
+
+    @staticmethod
+    def _contains_insufficient_signal(answer: str) -> bool:
+        text = (answer or "").strip()
+        if not text:
+            return True
+        patterns = [
+            "无法直接得出",
+            "无法给出",
+            "无法提供",
+            "信息不足",
+            "没有提供",
+            "缺少",
+        ]
+        return any(p in text for p in patterns)
+
+    @staticmethod
+    def _extract_numeric_field(all_text: str, aliases: list[str]) -> int | None:
+        for alias in aliases:
+            escaped = re.escape(alias)
+            regex_list = [
+                rf"{escaped}\s*[：:=]\s*[\"']?(-?\d+(?:\.\d+)?)",
+                rf"[\"']{escaped}[\"']\s*:\s*[\"']?(-?\d+(?:\.\d+)?)",
+            ]
+            for reg in regex_list:
+                match = re.search(reg, all_text, flags=re.IGNORECASE)
+                if match:
+                    try:
+                        return int(float(match.group(1)))
+                    except (TypeError, ValueError):
+                        continue
+        return None
+
+    @staticmethod
+    def _extract_student_fields_from_text(all_text: str) -> dict[str, int]:
+        fields: dict[str, int] = {}
+        for key, aliases in RAGService.FIELD_PATTERNS.items():
+            value = RAGService._extract_numeric_field(all_text, aliases)
+            if value is not None:
+                fields[key] = value
+        return fields
+
+    @staticmethod
+    def _rule_summary_from_sources(question: str, sources: list[dict[str, Any]]) -> str:
+        all_text = "\n".join([str((src or {}).get("text", "")).strip() for src in sources if src])
+        if not all_text:
+            return ""
+
+        fields = RAGService._extract_student_fields_from_text(all_text)
+        score = fields.get("Exam_Score")
+        hours = fields.get("Hours_Studied")
+        sleep = fields.get("Sleep_Hours")
+        prev = fields.get("Previous_Scores")
+        motivation = fields.get("Motivation_Level")
+
+        advice = []
+        if hours is not None and hours > 10:
+            advice.append("把长时低效学习压缩到 6-8 小时，采用“2小时学习+10分钟复盘”的节奏，优先做错题与薄弱点。")
+        if sleep is not None:
+            if sleep > 9:
+                advice.append("将睡眠逐步调整到 7-8 小时，把新增时间用于薄弱学科专项练习。")
+            elif 6 <= sleep <= 8:
+                advice.append("保持 6-8 小时规律睡眠，固定作息，保障注意力稳定。")
+            else:
+                advice.append("先把睡眠补到 6-8 小时，避免疲劳导致学习效率下滑。")
+        if prev is not None and score is not None and score <= prev + 10:
+            advice.append("按周跟踪同科目分项得分，定位掉分题型后做针对训练，避免只刷总量。")
+        if motivation is not None and motivation <= 4:
+            advice.append("把学习任务切成 25-30 分钟小目标并设置即时反馈，先恢复学习启动意愿。")
+        if score is not None and score < 75:
+            advice.append("优先保证基础题满分率，先清理高频错题再做综合题，避免一上来刷难题。")
+
+        if not advice:
+            lines = [line.strip() for line in all_text.splitlines() if line.strip()]
+            for line in lines:
+                for tag in ("优化方案：", "调整方案：", "提升方案：", "维持方案：", "建议："):
+                    if tag in line:
+                        part = line.split(tag, 1)[1].strip("；;，, ")
+                        if part and part not in advice:
+                            advice.append(part)
+                        break
+                if len(advice) >= 3:
+                    break
+
+        if not advice:
+            return ""
+
+        conclusion = "结论：有可落地的提分路径，核心是提升学习效率与策略匹配。"
+        if score is not None:
+            conclusion = f"结论：当前成绩约为 {score} 分，具备明确提升空间。"
+        items = "\n".join([f"{idx + 1}. {item}" for idx, item in enumerate(advice[:4])])
+        return f"{conclusion}\n建议：\n{items}"
 
     @staticmethod
     def query_answer_with_meta(question):
@@ -399,6 +555,11 @@ class RAGService:
             answer = RAGService._local_fallback_answer(context)
         except Exception as e:
             answer = f"{RAGService._local_fallback_answer(context)}\n（在线模型调用异常：{str(e)}）"
+
+        if RAGService._contains_insufficient_signal(answer):
+            fallback_summary = RAGService._rule_summary_from_sources(question, sources)
+            if fallback_summary:
+                answer = fallback_summary
 
         return {
             "answer": answer or RAGService._local_fallback_answer(context),

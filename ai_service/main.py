@@ -479,9 +479,9 @@ async def upload_excel(
         filename = upload_item.filename or "unknown"
         try:
             ext = _validate_upload_ext(upload_item, RAG_ALLOW_EXT)
-            timestamp = int(time.time())
+            timestamp = int(time.time() * 1000)
             name, _ = os.path.splitext(filename)
-            unique_filename = f"{name}_{timestamp}{ext}"
+            unique_filename = f"{name}_{timestamp}_{uuid.uuid4().hex[:8]}{ext}"
             file_path = os.path.join(DATA_DIR, unique_filename)
 
             with open(file_path, "wb") as f:
