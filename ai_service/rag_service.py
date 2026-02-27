@@ -10,6 +10,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 from sklearn.feature_extraction.text import HashingVectorizer
 
+from config import load_dashscope_api_key
 from database import Base, SessionLocal, engine
 from models import RagDataset
 
@@ -55,35 +56,8 @@ def _embed_texts(texts):
 
 _ensure_qdrant_collection()
 
-
-def _load_api_key():
-    # 1) 优先读系统环境变量
-    for key_name in ("DASHSCOPE_API_KEY", "QWEN_API_KEY"):
-        value = os.getenv(key_name, "").strip()
-        if value:
-            return value
-
-    # 2) 再尝试读取 ai_service/.env（支持 uv 启动时未自动注入环境变量）
-    env_path = os.path.join(BASE_DIR, ".env")
-    if os.path.exists(env_path):
-        try:
-            with open(env_path, "r", encoding="utf-8", errors="ignore") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line or line.startswith("#") or "=" not in line:
-                        continue
-                    key, val = line.split("=", 1)
-                    key = key.strip()
-                    val = val.strip().strip('"').strip("'")
-                    if key in ("DASHSCOPE_API_KEY", "QWEN_API_KEY") and val:
-                        return val
-        except Exception:
-            return ""
-    return ""
-
-
 # 通义千问 API 密钥（未配置时自动降级为本地模式）
-dashscope.api_key = _load_api_key()
+dashscope.api_key = load_dashscope_api_key()
 
 
 class RAGService:

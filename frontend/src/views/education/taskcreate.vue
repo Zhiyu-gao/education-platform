@@ -1,128 +1,126 @@
 <template>
-  <div class="app-container">
-    <el-form ref="formRef" :model="formData" :rules="rules" size="default" label-width="100px">
-      <el-form-item label="手机号" prop="mobile">
-        <el-input v-model="formData.mobile" placeholder="请输入手机号" :maxlength="11" show-word-limit clearable
-          prefix-icon='Cellphone' :style="{width: '100%'}"></el-input>
-      </el-form-item>
-      <el-form-item label="下拉选择" prop="field101">
-        <el-select v-model="formData.field101" placeholder="请选择下拉选择" clearable :style="{width: '100%'}">
-          <el-option v-for="(item, index) in field101Options" :key="index" :label="item.label"
-            :value="item.value" :disabled="item.disabled"></el-option>
-        </el-select>
-      </el-form-item>
-      <el-form-item label="开关" prop="field102" required>
-        <el-switch v-model="formData.field102"></el-switch>
-      </el-form-item>
-      <el-form-item label="开关" prop="field103" required>
-        <el-switch v-model="formData.field103"></el-switch>
-      </el-form-item>
-      <el-form-item label="开关" prop="field104" required>
-        <el-switch v-model="formData.field104"></el-switch>
-      </el-form-item>
-      <el-form-item label="级联选择" prop="field105">
-        <el-cascader v-model="formData.field105" :options="field105Options" :props="field105Props"
-          :style="{width: '100%'}" placeholder="请选择级联选择" clearable></el-cascader>
-      </el-form-item>
-      <el-form-item label="多行文本" prop="field106">
-        <el-input v-model="formData.field106" type="textarea" placeholder="请输入多行文本"
-          :autosize="{minRows: 4, maxRows: 4}" :style="{width: '100%'}"></el-input>
-      </el-form-item>
-      <el-form-item label="按钮" prop="field107">
-        <el-button type="primary" icon="Search" size="default"> 主要按钮 </el-button>
-      </el-form-item>
-      <el-form-item>
-        <el-button type="primary" @click="submitForm">提交</el-button>
-        <el-button @click="resetForm">重置</el-button>
-      </el-form-item>
-    </el-form>
+  <div class="app-container task-create-page">
+    <el-card shadow="never">
+      <template #header>
+        <div class="card-header">
+          <span>创建教师任务</span>
+          <el-tag type="info" effect="plain">管理者 Pad 端</el-tag>
+        </div>
+      </template>
+
+      <el-form
+        ref="formRef"
+        :model="taskForm"
+        :rules="rules"
+        label-width="110px"
+        class="task-form"
+      >
+        <el-form-item label="教师 ID" prop="teacherId">
+          <el-input-number v-model="taskForm.teacherId" :min="1" :step="1" controls-position="right" />
+        </el-form-item>
+
+        <el-form-item label="任务标题" prop="title">
+          <el-input
+            v-model.trim="taskForm.title"
+            maxlength="64"
+            show-word-limit
+            placeholder="请输入任务标题"
+          />
+        </el-form-item>
+
+        <el-form-item label="任务内容" prop="content">
+          <el-input
+            v-model.trim="taskForm.content"
+            type="textarea"
+            :rows="5"
+            maxlength="500"
+            show-word-limit
+            placeholder="请输入任务说明、验收标准与截止要求"
+          />
+        </el-form-item>
+
+        <el-form-item label="任务状态" prop="status">
+          <el-select v-model="taskForm.status" placeholder="请选择任务状态">
+            <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item>
+          <el-button type="primary" :loading="submitting" @click="submitForm">发布任务</el-button>
+          <el-button @click="resetForm">重置</el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
   </div>
 </template>
+
 <script setup>
-const {
-  proxy
-} = getCurrentInstance()
+import { ElMessage } from 'element-plus'
+import { createTeacherTask } from '@/api/education/pad'
+
 const formRef = ref()
-const data = reactive({
-  formData: {
-    mobile: '',
-    field101: undefined,
-    field102: false,
-    field103: false,
-    field104: false,
-    field105: [],
-    field106: '创建任务',
-    field107: undefined,
-  },
-  rules: {
-    mobile: [{
-      required: true,
-      message: '请输入手机号',
-      trigger: 'blur'
-    }, {
-      pattern: new RegExp(/^1(3|4|5|7|8|9)\d{9}$/),
-      message: '手机号格式错误',
-      trigger: 'blur'
-    }],
-    field101: [{
-      required: true,
-      message: '请选择下拉选择',
-      trigger: 'change'
-    }],
-    field105: [{
-      required: true,
-      type: 'array',
-      message: '请至少选择一个field105',
-      trigger: 'change'
-    }],
-    field106: [{
-      required: true,
-      message: '请输入多行文本',
-      trigger: 'blur'
-    }],
+const submitting = ref(false)
+
+const statusOptions = [
+  { label: '待处理', value: 'TODO' },
+  { label: '进行中', value: 'DOING' },
+  { label: '已完成', value: 'DONE' }
+]
+
+const initialTaskForm = () => ({
+  teacherId: undefined,
+  title: '',
+  content: '',
+  status: 'TODO'
+})
+
+const taskForm = reactive(initialTaskForm())
+
+const rules = {
+  teacherId: [{ required: true, message: '请输入教师 ID', trigger: 'blur' }],
+  title: [{ required: true, message: '请输入任务标题', trigger: 'blur' }],
+  content: [{ required: true, message: '请输入任务内容', trigger: 'blur' }],
+  status: [{ required: true, message: '请选择任务状态', trigger: 'change' }]
+}
+
+async function submitForm() {
+  if (!formRef.value || submitting.value) return
+  const valid = await formRef.value.validate().catch(() => false)
+  if (!valid) return
+
+  submitting.value = true
+  try {
+    await createTeacherTask({
+      teacherId: Number(taskForm.teacherId),
+      title: taskForm.title,
+      content: taskForm.content,
+      status: taskForm.status
+    })
+    ElMessage.success('任务创建成功')
+    resetForm()
+  } finally {
+    submitting.value = false
   }
-})
-const {
-  formData,
-  rules
-} = toRefs(data)
-const field101Options = ref([{
-  "label": "选项一",
-  "value": 1
-}, {
-  "label": "选项二",
-  "value": 2
-}])
-const field105Options = ref([])
-// props设置
-const field105Props = ref({
-  "multiple": false
-})
+}
 
-function getField105Options() {
-  // TODO 发起请求获取数据
-  field105Options.value
-}
-/**
- * @name: 表单提交
- * @description: 表单提交方法
- * @return {*}
- */
-function submitForm() {
-  formRef.value.validate((valid) => {
-    if (!valid) return
-    // TODO 提交表单
-  })
-}
-/**
- * @name: 表单重置
- * @description: 表单重置方法
- * @return {*}
- */
 function resetForm() {
-  formRef.value.resetFields()
+  Object.assign(taskForm, initialTaskForm())
+  formRef.value?.clearValidate()
+}
+</script>
+
+<style scoped lang="scss">
+.task-create-page {
+  max-width: 760px;
 }
 
-</script>
-<style>
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.task-form {
+  padding-top: 8px;
+}
 </style>

@@ -22,7 +22,7 @@ export function addStudentPerformance(data) {
   return request({
     url: '/student/performance',
     method: 'post',
-    data: data
+    data
   })
 }
 
@@ -31,14 +31,14 @@ export function updateStudentPerformance(data) {
   return request({
     url: '/student/performance',
     method: 'put',
-    data: data
+    data
   })
 }
 
 // 删除学生成绩
 export function delStudentPerformance(id) {
   return request({
-    url: '/student/performance/' + id,
+    url: `/student/performance/${id}`,
     method: 'delete'
   })
 }

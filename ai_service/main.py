@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageDraw, ImageStat, ImageOps, UnidentifiedImageError
 import dashscope
 
+from config import ensure_dashscope_api_key
 from rag_service import RAGService
 from prediction_service import PredictionService
 
@@ -51,45 +52,7 @@ DEFAULT_AI_QUESTION_COUNT = 12
 MIN_AI_QUESTION_COUNT = 4
 MAX_AI_QUESTION_COUNT = 40
 
-dashscope.api_key = os.getenv("DASHSCOPE_API_KEY", "").strip() or os.getenv("QWEN_API_KEY", "").strip()
-
-
-def _load_dashscope_api_key() -> str:
-    # 1) 优先读取系统环境变量
-    for key_name in ("DASHSCOPE_API_KEY", "QWEN_API_KEY"):
-        value = os.getenv(key_name, "").strip()
-        if value:
-            return value
-    # 2) 回退读取 ai_service/.env
-    env_path = os.path.join(BASE_DIR, ".env")
-    if not os.path.exists(env_path):
-        return ""
-    try:
-        with open(env_path, "r", encoding="utf-8", errors="ignore") as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-                key, value = line.split("=", 1)
-                key = key.strip()
-                value = value.strip().strip('"').strip("'")
-                if key in ("DASHSCOPE_API_KEY", "QWEN_API_KEY") and value:
-                    return value
-    except Exception:
-        return ""
-    return ""
-
-
-def _ensure_dashscope_api_key() -> bool:
-    loaded = _load_dashscope_api_key()
-    if loaded:
-        dashscope.api_key = loaded
-        os.environ["DASHSCOPE_API_KEY"] = loaded
-        return True
-    return bool(getattr(dashscope, "api_key", ""))
-
-
-_ensure_dashscope_api_key()
+ensure_dashscope_api_key()
 
 
 def _validate_upload_ext(upload_file: UploadFile, allow_ext: tuple[str, ...]) -> str:
@@ -111,7 +74,7 @@ async def _save_upload(upload_file: UploadFile, save_dir: str, allow_ext: tuple[
         try:
             with Image.open(io.BytesIO(content)) as img:
                 img.verify()
-        except Exception:
+        except (UnidentifiedImageError, OSError):
             raise HTTPException(status_code=400, detail="上传内容不是有效图片文件")
     with open(file_path, "wb") as f:
         f.write(content)
@@ -309,7 +272,8 @@ def _extract_json_text(raw_text: str) -> Dict[str, Any]:
         return {}
     try:
         return json.loads(text)
-    except Exception:
+    except json.JSONDecodeError:
+        # 模型可能附带解释文本，继续尝试从文本中截取 JSON 段。
         pass
     start = text.find("{")
     end = text.rfind("}")
@@ -327,7 +291,7 @@ def _analyze_questions_with_qwen_vl(
     rubric: str = "",
     question_count: int = DEFAULT_AI_QUESTION_COUNT,
 ) -> List[Dict[str, Any]]:
-    if not _ensure_dashscope_api_key():
+    if not ensure_dashscope_api_key():
         return []
     try:
         with open(student_path, "rb") as f:
@@ -494,8 +458,8 @@ async def upload_excel(
                 "status": "success" if is_success else "error",
                 "message": result,
             })
-        except HTTPException:
-            results.append({"filename": filename, "status": "error", "message": "请上传 .xlsx / .xls / .txt 文件"})
+        except HTTPException as http_error:
+            results.append({"filename": filename, "status": "error", "message": http_error.detail})
         except Exception as e:
             results.append({"filename": filename, "status": "error", "message": f"处理文件时出错: {str(e)}"})
 
@@ -504,7 +468,7 @@ async def upload_excel(
 # 问答接口
 @app.get("/query")
 async def query(question: str):
-    _ensure_dashscope_api_key()
+    ensure_dashscope_api_key()
     q = (question or "").strip()
     if not q:
         raise HTTPException(status_code=400, detail="问题不能为空")
@@ -520,7 +484,7 @@ async def query(question: str):
 
 @app.get("/llm-status")
 async def llm_status():
-    available = _ensure_dashscope_api_key()
+    available = ensure_dashscope_api_key()
     return {"onlineModelEnabled": bool(available), "provider": "dashscope"}
 
 
@@ -678,9 +642,11 @@ async def train_prediction_model(file: UploadFile = File(..., description="上�
         
         # 训练模型（传入文件对象）
         result = PredictionService.train_model_from_csv(file.file)
+        if result.get("status") == "error":
+            raise HTTPException(status_code=500, detail=result.get("message", "模型训练失败"))
         return {"status": "success", "message": "模型训练成功", "result": result}
-    except HTTPException as e:
-        raise e
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"训练模型时出错: {str(e)}")
 
